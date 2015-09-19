@@ -204,7 +204,6 @@ static int taskreg_nesting_level;
 static int target_nesting_level;
 static struct omp_region *root_omp_region;
 static bitmap task_shared_vars;
-static vec<omp_context *> taskreg_contexts;
 
 static void scan_omp (gimple_seq *, omp_context *);
 static tree scan_omp_1_op (tree *, int *, void *);
@@ -1483,8 +1482,7 @@ fixup_child_record_type (omp_context *ctx)
       layout_type (type);
     }
 
-  TREE_TYPE (ctx->receiver_decl)
-    = build_qualified_type (build_reference_type (type), TYPE_QUAL_RESTRICT);
+  TREE_TYPE (ctx->receiver_decl) = build_pointer_type (type);
 }
 
 /* Instantiate decls as necessary in CTX to satisfy the data sharing
@@ -1634,8 +1632,7 @@ scan_sharing_clauses (tree clauses, omp_context *ctx)
 		 #pragma omp target data, there is nothing to map for
 		 those.  */
 	      if (gimple_omp_target_kind (ctx->stmt) == GF_OMP_TARGET_KIND_DATA
-		  && !POINTER_TYPE_P (TREE_TYPE (decl))
-		  && !OMP_CLAUSE_MAP_ZERO_BIAS_ARRAY_SECTION (c))
+		  && !POINTER_TYPE_P (TREE_TYPE (decl)))
 		break;
 	    }
 	  if (DECL_P (decl))
@@ -2027,7 +2024,6 @@ scan_omp_parallel (gimple_stmt_iterator *gsi, omp_context *outer_ctx)
     }
 
   ctx = new_omp_context (stmt, outer_ctx);
-  taskreg_contexts.safe_push (ctx);
   if (taskreg_nesting_level > 1)
     ctx->is_nested = true;
   ctx->field_map = splay_tree_new (splay_tree_compare_pointers, 0, 0);
@@ -2047,6 +2043,11 @@ scan_omp_parallel (gimple_stmt_iterator *gsi, omp_context *outer_ctx)
 
   if (TYPE_FIELDS (ctx->record_type) == NULL)
     ctx->record_type = ctx->receiver_decl = NULL;
+  else
+    {
+      layout_type (ctx->record_type);
+      fixup_child_record_type (ctx);
+    }
 }
 
 /* Scan an OpenMP task directive.  */
@@ -2057,6 +2058,7 @@ scan_omp_task (gimple_stmt_iterator *gsi, omp_context *outer_ctx)
   omp_context *ctx;
   tree name, t;
   gimple stmt = gsi_stmt (*gsi);
+  location_t loc = gimple_location (stmt);
 
   /* Ignore task directives with empty bodies.  */
   if (optimize > 0
@@ -2067,7 +2069,6 @@ scan_omp_task (gimple_stmt_iterator *gsi, omp_context *outer_ctx)
     }
 
   ctx = new_omp_context (stmt, outer_ctx);
-  taskreg_contexts.safe_push (ctx);
   if (taskreg_nesting_level > 1)
     ctx->is_nested = true;
   ctx->field_map = splay_tree_new (splay_tree_compare_pointers, 0, 0);
@@ -2105,71 +2106,8 @@ scan_omp_task (gimple_stmt_iterator *gsi, omp_context *outer_ctx)
       t = build_int_cst (long_integer_type_node, 1);
       gimple_omp_task_set_arg_align (stmt, t);
     }
-}
-
-
-/* If any decls have been made addressable during scan_omp,
-   adjust their fields if needed, and layout record types
-   of parallel/task constructs.  */
-
-static void
-finish_taskreg_scan (omp_context *ctx)
-{
-  if (ctx->record_type == NULL_TREE)
-    return;
-
-  /* If any task_shared_vars were needed, verify all
-     OMP_CLAUSE_SHARED clauses on GIMPLE_OMP_{PARALLEL,TASK}
-     statements if use_pointer_for_field hasn't changed
-     because of that.  If it did, update field types now.  */
-  if (task_shared_vars)
-    {
-      tree c;
-
-      for (c = gimple_omp_taskreg_clauses (ctx->stmt);
-	   c; c = OMP_CLAUSE_CHAIN (c))
-	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED)
-	  {
-	    tree decl = OMP_CLAUSE_DECL (c);
-
-	    /* Global variables don't need to be copied,
-	       the receiver side will use them directly.  */
-	    if (is_global_var (maybe_lookup_decl_in_outer_ctx (decl, ctx)))
-	      continue;
-	    if (!bitmap_bit_p (task_shared_vars, DECL_UID (decl))
-		|| !use_pointer_for_field (decl, ctx))
-	      continue;
-	    tree field = lookup_field (decl, ctx);
-	    if (TREE_CODE (TREE_TYPE (field)) == POINTER_TYPE
-		&& TREE_TYPE (TREE_TYPE (field)) == TREE_TYPE (decl))
-	      continue;
-	    TREE_TYPE (field) = build_pointer_type (TREE_TYPE (decl));
-	    TREE_THIS_VOLATILE (field) = 0;
-	    DECL_USER_ALIGN (field) = 0;
-	    DECL_ALIGN (field) = TYPE_ALIGN (TREE_TYPE (field));
-	    if (TYPE_ALIGN (ctx->record_type) < DECL_ALIGN (field))
-	      TYPE_ALIGN (ctx->record_type) = DECL_ALIGN (field);
-	    if (ctx->srecord_type)
-	      {
-		tree sfield = lookup_sfield (decl, ctx);
-		TREE_TYPE (sfield) = TREE_TYPE (field);
-		TREE_THIS_VOLATILE (sfield) = 0;
-		DECL_USER_ALIGN (sfield) = 0;
-		DECL_ALIGN (sfield) = DECL_ALIGN (field);
-		if (TYPE_ALIGN (ctx->srecord_type) < DECL_ALIGN (sfield))
-		  TYPE_ALIGN (ctx->srecord_type) = DECL_ALIGN (sfield);
-	      }
-	  }
-    }
-
-  if (gimple_code (ctx->stmt) == GIMPLE_OMP_PARALLEL)
-    {
-      layout_type (ctx->record_type);
-      fixup_child_record_type (ctx);
-    }
   else
     {
-      location_t loc = gimple_location (ctx->stmt);
       tree *p, vla_fields = NULL_TREE, *q = &vla_fields;
       /* Move VLA fields to the end.  */
       p = &TYPE_FIELDS (ctx->record_type);
@@ -2189,12 +2127,12 @@ finish_taskreg_scan (omp_context *ctx)
       fixup_child_record_type (ctx);
       if (ctx->srecord_type)
 	layout_type (ctx->srecord_type);
-      tree t = fold_convert_loc (loc, long_integer_type_node,
-				 TYPE_SIZE_UNIT (ctx->record_type));
-      gimple_omp_task_set_arg_size (ctx->stmt, t);
+      t = fold_convert_loc (loc, long_integer_type_node,
+			TYPE_SIZE_UNIT (ctx->record_type));
+      gimple_omp_task_set_arg_size (stmt, t);
       t = build_int_cst (long_integer_type_node,
 			 TYPE_ALIGN_UNIT (ctx->record_type));
-      gimple_omp_task_set_arg_align (ctx->stmt, t);
+      gimple_omp_task_set_arg_align (stmt, t);
     }
 }
 
@@ -4786,10 +4724,7 @@ expand_omp_taskreg (struct omp_region *region)
   child_cfun = DECL_STRUCT_FUNCTION (child_fn);
 
   entry_bb = region->entry;
-  if (gimple_code (entry_stmt) == GIMPLE_OMP_TASK)
-    exit_bb = region->cont;
-  else
-    exit_bb = region->exit;
+  exit_bb = region->exit;
 
   if (is_combined_parallel (region))
     ws_args = region->ws_args;
@@ -4838,9 +4773,7 @@ expand_omp_taskreg (struct omp_region *region)
 	 variable.  In which case, we need to keep the assignment.  */
       if (gimple_omp_taskreg_data_arg (entry_stmt))
 	{
-	  basic_block entry_succ_bb
-	    = single_succ_p (entry_bb) ? single_succ (entry_bb)
-				       : FALLTHRU_EDGE (entry_bb)->dest;
+	  basic_block entry_succ_bb = single_succ (entry_bb);
 	  gimple_stmt_iterator gsi;
 	  tree arg, narg;
 	  gimple parcopy_stmt = NULL;
@@ -4929,28 +4862,14 @@ expand_omp_taskreg (struct omp_region *region)
       gsi_remove (&gsi, true);
       e = split_block (entry_bb, stmt);
       entry_bb = e->dest;
-      edge e2 = NULL;
-      if (gimple_code (entry_stmt) == GIMPLE_OMP_PARALLEL)
-	single_succ_edge (entry_bb)->flags = EDGE_FALLTHRU;
-      else
-	{
-	  e2 = make_edge (e->src, BRANCH_EDGE (entry_bb)->dest, EDGE_ABNORMAL);
-	  gcc_assert (e2->dest == region->exit);
-	  remove_edge (BRANCH_EDGE (entry_bb));
-	  set_immediate_dominator (CDI_DOMINATORS, e2->dest, e->src);
-	  gsi = gsi_last_bb (region->exit);
-	  gcc_assert (!gsi_end_p (gsi)
-		      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
-	  gsi_remove (&gsi, true);
-	}
+      single_succ_edge (entry_bb)->flags = EDGE_FALLTHRU;
 
-      /* Convert GIMPLE_OMP_{RETURN,CONTINUE} into a RETURN_EXPR.  */
+      /* Convert GIMPLE_OMP_RETURN into a RETURN_EXPR.  */
       if (exit_bb)
 	{
 	  gsi = gsi_last_bb (exit_bb);
 	  gcc_assert (!gsi_end_p (gsi)
-		      && (gimple_code (gsi_stmt (gsi))
-			  == (e2 ? GIMPLE_OMP_CONTINUE : GIMPLE_OMP_RETURN)));
+		      && gimple_code (gsi_stmt (gsi)) == GIMPLE_OMP_RETURN);
 	  stmt = gimple_build_return (NULL);
 	  gsi_insert_after (&gsi, stmt, GSI_SAME_STMT);
 	  gsi_remove (&gsi, true);
@@ -4971,14 +4890,6 @@ expand_omp_taskreg (struct omp_region *region)
       new_bb = move_sese_region_to_fn (child_cfun, entry_bb, exit_bb, block);
       if (exit_bb)
 	single_succ_edge (new_bb)->flags = EDGE_FALLTHRU;
-      if (e2)
-	{
-	  basic_block dest_bb = e2->dest;
-	  if (!exit_bb)
-	    make_edge (new_bb, dest_bb, EDGE_FALLTHRU);
-	  remove_edge (e2);
-	  set_immediate_dominator (CDI_DOMINATORS, dest_bb, new_bb);
-	}
       /* When the OMP expansion process cannot guarantee an up-to-date
          loop tree arrange for the child function to fixup loops.  */
       if (loops_state_satisfies_p (LOOPS_NEED_FIXUP))
@@ -9728,10 +9639,6 @@ lower_omp_taskreg (gimple_stmt_iterator *gsi_p, omp_context *ctx)
     gimple_seq_add_stmt (&new_body, gimple_build_label (ctx->cancel_label));
   gimple_seq_add_seq (&new_body, par_olist);
   new_body = maybe_catch_exception (new_body);
-  if (gimple_code (stmt) == GIMPLE_OMP_TASK)
-    gimple_seq_add_stmt (&new_body,
-			 gimple_build_omp_continue (integer_zero_node,
-						    integer_zero_node));
   gimple_seq_add_stmt (&new_body, gimple_build_omp_return (false));
   gimple_omp_set_body (stmt, new_body);
 
@@ -9920,9 +9827,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		  continue;
 	      }
 
-	    unsigned int talign = TYPE_ALIGN_UNIT (TREE_TYPE (ovar));
-	    if (DECL_P (ovar) && DECL_ALIGN_UNIT (ovar) > talign)
-	      talign = DECL_ALIGN_UNIT (ovar);
 	    if (nc)
 	      {
 		tree var = lookup_decl_in_outer_ctx (ovar, ctx);
@@ -9937,7 +9841,6 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 		      = create_tmp_var (TREE_TYPE (TREE_TYPE (x)), NULL);
 		    mark_addressable (avar);
 		    gimplify_assign (avar, build_fold_addr_expr (var), &ilist);
-		    talign = DECL_ALIGN_UNIT (avar);
 		    avar = build_fold_addr_expr (avar);
 		    gimplify_assign (x, avar, &ilist);
 		  }
@@ -9990,6 +9893,9 @@ lower_omp_target (gimple_stmt_iterator *gsi_p, omp_context *ctx)
 	      default:
 		gcc_unreachable ();
 	      }
+	    unsigned int talign = TYPE_ALIGN_UNIT (TREE_TYPE (ovar));
+	    if (DECL_P (ovar) && DECL_ALIGN_UNIT (ovar) > talign)
+	      talign = DECL_ALIGN_UNIT (ovar);
 	    talign = ceil_log2 (talign);
 	    tkind |= talign << 3;
 	    CONSTRUCTOR_APPEND_ELT (vkind, purpose,
@@ -10363,8 +10269,6 @@ static unsigned int
 execute_lower_omp (void)
 {
   gimple_seq body;
-  int i;
-  omp_context *ctx;
 
   /* This pass always runs, to provide PROP_gimple_lomp.
      But there is nothing to do unless -fopenmp is given.  */
@@ -10377,9 +10281,6 @@ execute_lower_omp (void)
   body = gimple_body (current_function_decl);
   scan_omp (&body, NULL);
   gcc_assert (taskreg_nesting_level == 0);
-  FOR_EACH_VEC_ELT (taskreg_contexts, i, ctx)
-    finish_taskreg_scan (ctx);
-  taskreg_contexts.release ();
 
   if (all_contexts->root)
     {
@@ -10732,10 +10633,6 @@ make_gimple_omp_edges (basic_block bb, struct omp_region **region,
 	 somewhere other than the next block.  This will be
 	 created later.  */
       cur_region->exit = bb;
-      if (cur_region->type == GIMPLE_OMP_TASK)
-	/* Add an edge corresponding to not scheduling the task
-	   immediately.  */
-	make_edge (cur_region->entry, bb, EDGE_ABNORMAL);
       fallthru = cur_region->type != GIMPLE_OMP_SECTION;
       cur_region = cur_region->outer;
       break;
@@ -10782,10 +10679,6 @@ make_gimple_omp_edges (basic_block bb, struct omp_region **region,
 	    make_edge (switch_bb, bb->next_bb, 0);
 	    fallthru = false;
 	  }
-	  break;
-
-	case GIMPLE_OMP_TASK:
-	  fallthru = true;
 	  break;
 
 	default:
@@ -11146,11 +11039,9 @@ simd_clone_mangle (struct cgraph_node *node,
     }
 
   pp_underscore (&pp);
-  const char *str = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (node->decl));
-  if (*str == '*')
-    ++str;
-  pp_string (&pp, str);
-  str = pp_formatted_text (&pp);
+  pp_string (&pp,
+	     IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (node->decl)));
+  const char *str = pp_formatted_text (&pp);
 
   /* If there already is a SIMD clone with the same mangled name, don't
      add another one.  This can happen e.g. for
@@ -11224,24 +11115,24 @@ simd_clone_adjust_return_type (struct cgraph_node *node)
   if (orig_rettype == void_type_node)
     return NULL_TREE;
   TREE_TYPE (fndecl) = build_distinct_type_copy (TREE_TYPE (fndecl));
-  t = TREE_TYPE (TREE_TYPE (fndecl));
-  if (INTEGRAL_TYPE_P (t) || POINTER_TYPE_P (t))
+  if (INTEGRAL_TYPE_P (TREE_TYPE (TREE_TYPE (fndecl)))
+      || POINTER_TYPE_P (TREE_TYPE (TREE_TYPE (fndecl))))
     veclen = node->simdclone->vecsize_int;
   else
     veclen = node->simdclone->vecsize_float;
-  veclen /= GET_MODE_BITSIZE (TYPE_MODE (t));
+  veclen /= GET_MODE_BITSIZE (TYPE_MODE (TREE_TYPE (TREE_TYPE (fndecl))));
   if (veclen > node->simdclone->simdlen)
     veclen = node->simdclone->simdlen;
-  if (POINTER_TYPE_P (t))
-    t = pointer_sized_int_node;
   if (veclen == node->simdclone->simdlen)
-    t = build_vector_type (t, node->simdclone->simdlen);
+    TREE_TYPE (TREE_TYPE (fndecl))
+      = build_vector_type (TREE_TYPE (TREE_TYPE (fndecl)),
+			   node->simdclone->simdlen);
   else
     {
-      t = build_vector_type (t, veclen);
+      t = build_vector_type (TREE_TYPE (TREE_TYPE (fndecl)), veclen);
       t = build_array_type_nelts (t, node->simdclone->simdlen / veclen);
+      TREE_TYPE (TREE_TYPE (fndecl)) = t;
     }
-  TREE_TYPE (TREE_TYPE (fndecl)) = t;
   if (!node->definition)
     return NULL_TREE;
 
@@ -11330,10 +11221,7 @@ simd_clone_adjust_argument_types (struct cgraph_node *node)
 	  if (veclen > node->simdclone->simdlen)
 	    veclen = node->simdclone->simdlen;
 	  adj.arg_prefix = "simd";
-	  if (POINTER_TYPE_P (parm_type))
-	    adj.type = build_vector_type (pointer_sized_int_node, veclen);
-	  else
-	    adj.type = build_vector_type (parm_type, veclen);
+	  adj.type = build_vector_type (parm_type, veclen);
 	  node->simdclone->args[i].vector_type = adj.type;
 	  for (j = veclen; j < node->simdclone->simdlen; j += veclen)
 	    {
@@ -11374,10 +11262,7 @@ simd_clone_adjust_argument_types (struct cgraph_node *node)
       veclen /= GET_MODE_BITSIZE (TYPE_MODE (base_type));
       if (veclen > node->simdclone->simdlen)
 	veclen = node->simdclone->simdlen;
-      if (POINTER_TYPE_P (base_type))
-	adj.type = build_vector_type (pointer_sized_int_node, veclen);
-      else
-	adj.type = build_vector_type (base_type, veclen);
+      adj.type = build_vector_type (base_type, veclen);
       adjustments.safe_push (adj);
 
       for (j = veclen; j < node->simdclone->simdlen; j += veclen)
@@ -11551,22 +11436,9 @@ ipa_simd_modify_stmt_ops (tree *tp, int *walk_subtrees, void *data)
   if (tp != orig_tp)
     {
       repl = build_fold_addr_expr (repl);
-      gimple stmt;
-      if (is_gimple_debug (info->stmt))
-	{
-	  tree vexpr = make_node (DEBUG_EXPR_DECL);
-	  stmt = gimple_build_debug_source_bind (vexpr, repl, NULL);
-	  DECL_ARTIFICIAL (vexpr) = 1;
-	  TREE_TYPE (vexpr) = TREE_TYPE (repl);
-	  DECL_MODE (vexpr) = TYPE_MODE (TREE_TYPE (repl));
-	  repl = vexpr;
-	}
-      else
-	{
-	  stmt = gimple_build_assign (make_ssa_name (TREE_TYPE (repl),
-						     NULL), repl);
-	  repl = gimple_assign_lhs (stmt);
-	}
+      gimple stmt
+	= gimple_build_assign (make_ssa_name (TREE_TYPE (repl), NULL), repl);
+      repl = gimple_assign_lhs (stmt);
       gimple_stmt_iterator gsi = gsi_for_stmt (info->stmt);
       gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
       *orig_tp = repl;

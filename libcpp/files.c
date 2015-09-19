@@ -291,13 +291,11 @@ pch_open_file (cpp_reader *pfile, _cpp_file *file, bool *invalid_pch)
 
   /* If the file is not included as first include from either the toplevel
      file or the command-line it is not a valid use of PCH.  */
-  for (_cpp_file *f = pfile->all_files; f; f = f->next_file)
-    if (f->implicit_preinclude)
-      continue;
-    else if (f->main_file)
-      break;
-    else
-      return false;
+  if (pfile->all_files
+      && pfile->all_files->next_file
+      && !(pfile->all_files->implicit_preinclude
+	   || pfile->all_files->next_file->implicit_preinclude))
+    return false;
 
   flen = strlen (path);
   len = flen + sizeof (extension);
@@ -718,12 +716,14 @@ read_file_guts (cpp_reader *pfile, _cpp_file *file)
     cpp_error (pfile, CPP_DL_WARNING,
 	       "%s is shorter than expected", file->path);
 
+	       
+  off_t ot = (off_t) file->st.st_size;
   file->buffer = _cpp_convert_input (pfile,
 				     CPP_OPTION (pfile, input_charset),
 				     buf, size + 16, total,
 				     &file->buffer_start,
-				     &file->st.st_size);
-  file->buffer_valid = true;
+				     &ot);
+   file->st.st_size = ot;
 
   return true;
 }
@@ -1025,8 +1025,6 @@ open_file_failed (cpp_reader *pfile, _cpp_file *file, int angle_brackets)
   int sysp = pfile->line_table->highest_line > 1 && pfile->buffer ? pfile->buffer->sysp : 0;
   bool print_dep = CPP_OPTION (pfile, deps.style) > (angle_brackets || !!sysp);
 
-  if (pfile->state.in__has_include__)
-    return;
 
   errno = file->err_no;
   if (print_dep && CPP_OPTION (pfile, deps.missing_files) && errno == ENOENT)

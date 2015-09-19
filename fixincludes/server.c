@@ -48,10 +48,12 @@
 
 #include "fixlib.h"
 #include "server.h"
+#include "stdlib.h"
 
 STATIC volatile enum t_bool read_pipe_timeout;
 STATIC pid_t server_master_pid = NOPROCESS;
 
+extern int atexit(void (*)(void));
 tSCC* def_args[] =
 { (char *) NULL, (char *) NULL };
 STATIC t_pf_pair server_pair =
@@ -177,9 +179,9 @@ sig_handler (int signo ATTRIBUTE_UNUSED)
 static void
 server_setup (void)
 {
-  static int atexit_done = 0;
+  int atexit_done = 0;
   char buff [MAXPATHLEN + 1];
-  
+  int atexit (void (* func) ()) {return 0;}
   if (atexit_done++ == 0)
     atexit (close_server);
   else

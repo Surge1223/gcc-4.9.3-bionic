@@ -123,13 +123,14 @@ SUBDIRS =@subdirs@ build
 
 # Selection of languages to be made.
 CONFIG_LANGUAGES = @all_selected_languages@
-LANGUAGES = c gcov$(exeext) gcov-dump$(exeext) $(CONFIG_LANGUAGES)
+LANGUAGES = c gcov$(exeext) gcov-dump$(exeext) gcov-tool$(exeext) \
+            $(CONFIG_LANGUAGES)
 
 # Default values for variables overridden in Makefile fragments.
 # CFLAGS is for the user to override to, e.g., do a cross build with -O2.
 # TCFLAGS is used for compilations with the GCC just built.
 # T_CFLAGS is used for all compilations and is overridden by t-* files.
-T_CFLAGS =
+T_CFLAGS = -fomit-frame-pointer
 TCFLAGS =
 CFLAGS = @CFLAGS@
 CXXFLAGS = @CXXFLAGS@
@@ -196,6 +197,9 @@ GCC_WARN_CXXFLAGS = $(LOOSE_WARN) $($(@D)-warn) $(NOCOMMON_FLAG) $($@-warn)
 # flex output may yield harmless "no previous prototype" warnings
 build/gengtype-lex.o-warn = -Wno-error
 gengtype-lex.o-warn = -Wno-error
+libgcov-util.o-warn = -Wno-error
+libgcov-driver-tool.o-warn = -Wno-error
+libgcov-merge-tool.o-warn = -Wno-error
 
 # All warnings have to be shut off in stage1 if the compiler used then
 # isn't gcc; configure determines that.  WARN_CFLAGS will be either
@@ -769,6 +773,7 @@ GCC_INSTALL_NAME := $(shell echo gcc|sed '$(program_transform_name)')
 GCC_TARGET_INSTALL_NAME := $(target_noncanonical)-$(shell echo gcc|sed '$(program_transform_name)')
 CPP_INSTALL_NAME := $(shell echo cpp|sed '$(program_transform_name)')
 GCOV_INSTALL_NAME := $(shell echo gcov|sed '$(program_transform_name)')
+GCOV_TOOL_INSTALL_NAME := $(shell echo gcov-tool|sed '$(program_transform_name)')
 
 # Setup the testing framework, if you have one
 EXPECT = `if [ -f $${rootme}/../expect/expect ] ; then \
@@ -890,7 +895,7 @@ BASIC_BLOCK_H = basic-block.h $(PREDICT_H) $(VEC_H) $(FUNCTION_H) \
 GIMPLE_H = gimple.h gimple.def gsstruct.def pointer-set.h $(VEC_H) \
 	$(GGC_H) $(BASIC_BLOCK_H) $(TREE_H) tree-ssa-operands.h \
 	tree-ssa-alias.h $(INTERNAL_FN_H) $(HASH_TABLE_H) is-a.h
-GCOV_IO_H = gcov-io.h gcov-iov.h auto-host.h
+GCOV_IO_H = gcov-io.h gcov-iov.h auto-host.h gcov-counter.def
 RECOG_H = recog.h
 EMIT_RTL_H = emit-rtl.h
 FLAGS_H = flags.h flag-types.h $(OPTIONS_H)
@@ -905,7 +910,8 @@ CFGLOOP_H = cfgloop.h $(BASIC_BLOCK_H) double-int.h \
 IPA_UTILS_H = ipa-utils.h $(TREE_H) $(CGRAPH_H)
 IPA_REFERENCE_H = ipa-reference.h $(BITMAP_H) $(TREE_H)
 CGRAPH_H = cgraph.h $(VEC_H) $(TREE_H) $(BASIC_BLOCK_H) $(FUNCTION_H) \
-	cif-code.def ipa-ref.h ipa-ref-inline.h $(LINKER_PLUGIN_API_H) is-a.h
+	cif-code.def ipa-ref.h ipa-ref-inline.h $(LINKER_PLUGIN_API_H) is-a.h \
+	l-ipo.h
 DF_H = df.h $(BITMAP_H) $(REGSET_H) sbitmap.h $(BASIC_BLOCK_H) \
 	alloc-pool.h $(TIMEVAR_H)
 RESOURCE_H = resource.h hard-reg-set.h $(DF_H)
@@ -966,7 +972,7 @@ INTERNAL_CFLAGS = -DIN_GCC $(PICFLAG) @CROSS@
 # This is the variable actually used when we compile. If you change this,
 # you probably want to update BUILD_CFLAGS in configure.ac
 ALL_CFLAGS = $(T_CFLAGS) $(CFLAGS-$@) \
-  $(CFLAGS) $(INTERNAL_CFLAGS) $(COVERAGE_FLAGS) $(WARN_CFLAGS) @DEFS@
+  $(CFLAGS) $(INTERNAL_CFLAGS) $(COVERAGE_FLAGS) $(WARN_CFLAGS) @DEFS@ @NOSTDINC@
 
 # The C++ version.
 ALL_CXXFLAGS = $(T_CFLAGS) $(CFLAGS-$@) $(CXXFLAGS) $(INTERNAL_CFLAGS) \
@@ -1163,6 +1169,7 @@ OBJS = \
 	alias.o \
 	alloc-pool.o \
 	auto-inc-dec.o \
+	auto-profile.o \
 	bb-reorder.o \
 	bitmap.o \
 	bt-load.o \
@@ -1286,6 +1293,7 @@ OBJS = \
 	ira-emit.o \
 	ira-lives.o \
 	jump.o \
+	l-ipo.o \
 	langhooks.o \
 	lcm.o \
 	lists.o \
@@ -1354,6 +1362,7 @@ OBJS = \
 	sel-sched-dump.o \
 	sel-sched.o \
 	sese.o \
+	simplify-got.o \
 	simplify-rtx.o \
 	sparseset.o \
 	sreal.o \
@@ -1487,7 +1496,7 @@ ALL_HOST_FRONTEND_OBJS = $(foreach v,$(CONFIG_LANGUAGES),$($(v)_OBJS))
 ALL_HOST_BACKEND_OBJS = $(GCC_OBJS) $(OBJS) $(OBJS-libcommon) \
   $(OBJS-libcommon-target) @TREEBROWSER@ main.o c-family/cppspec.o \
   $(COLLECT2_OBJS) $(EXTRA_GCC_OBJS) $(GCOV_OBJS) $(GCOV_DUMP_OBJS) \
-  lto-wrapper.o
+  $(GCOV_TOOL_OBJS) lto-wrapper.o
 
 # This lists all host object files, whether they are included in this
 # compilation or not.
@@ -1512,6 +1521,7 @@ MOSTLYCLEANFILES = insn-flags.h insn-config.h insn-codes.h \
  $(SPECS) collect2$(exeext) gcc-ar$(exeext) gcc-nm$(exeext) \
  gcc-ranlib$(exeext) \
  gcov-iov$(build_exeext) gcov$(exeext) gcov-dump$(exeext) \
+ gcov-tool$(exeect) \
  gengtype$(exeext) *.[0-9][0-9].* *.[si] *-checksum.c libbackend.a \
  libcommon-target.a libcommon.a libgcc.mk
 
@@ -1906,9 +1916,10 @@ collect2$(exeext): $(COLLECT2_OBJS) $(LIBDEPS)
 CFLAGS-collect2.o += -DTARGET_MACHINE=\"$(target_noncanonical)\" \
 	@TARGET_SYSTEM_ROOT_DEFINE@
 
-lto-wrapper$(exeext): lto-wrapper.o ggc-none.o libcommon-target.a $(LIBDEPS)
+LTO_WRAPPER_OBJS = lto-wrapper.o vec.o ggc-none.o
+lto-wrapper$(exeext): $(LTO_WRAPPER_OBJS) libcommon-target.a $(LIBDEPS)
 	+$(LINKER) $(ALL_COMPILERFLAGS) $(LDFLAGS) -o T$@ \
-	    lto-wrapper.o ggc-none.o libcommon-target.a $(LIBS)
+	    $(LTO_WRAPPER_OBJS) libcommon-target.a $(LIBS)
 	mv -f T$@ $@
 
 # Files used by all variants of C or by the stand-alone pre-processor.
@@ -1933,10 +1944,13 @@ DRIVER_DEFINES = \
   -DSTANDARD_STARTFILE_PREFIX=\"$(unlibsubdir)/\" \
   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc/\" \
   -DSTANDARD_LIBEXEC_PREFIX=\"$(libexecdir)/gcc/\" \
+  -DDYNAMIC_LINKER_PREFIX=\"@DYNAMICLINKERPREFIX@\" \
+  -DDYNAMIC_LINKER=\"@DYNAMICLINKER@\" \
   -DDEFAULT_TARGET_VERSION=\"$(version)\" \
   -DDEFAULT_TARGET_MACHINE=\"$(target_noncanonical)\" \
   -DSTANDARD_BINDIR_PREFIX=\"$(bindir)/\" \
   -DTOOLDIR_BASE_PREFIX=\"$(libsubdir_to_prefix)$(prefix_to_exec_prefix)\" \
+  @RUNTIME_ROOT_PREFIX_DEFINE@ \
   @TARGET_SYSTEM_ROOT_DEFINE@ \
   $(VALGRIND_DRIVER_DEFINES) \
   $(if $(SHLIB),$(if $(filter yes,@enable_shared@),-DENABLE_SHARED_LIBGCC)) \
@@ -1985,7 +1999,7 @@ CFLAGS-version.o += -DBASEVER=$(BASEVER_s) -DDATESTAMP=$(DATESTAMP_s) \
 	-DREVISION=$(REVISION_s) \
 	-DDEVPHASE=$(DEVPHASE_s) -DPKGVERSION=$(PKGVERSION_s) \
 	-DBUGURL=$(BUGURL_s)
-version.o: $(REVISION) $(DATESTAMP) $(BASEVER) $(DEVPHASE)
+version.o: version.c version.h $(REVISION) $(DATESTAMP) $(BASEVER) $(DEVPHASE)
 
 # lto-compress.o needs $(ZLIBINC) added to the include flags.
 CFLAGS-lto-compress.o += $(ZLIBINC)
@@ -2202,30 +2216,8 @@ s-tm-texi: $(srcdir)/doc/../doc/tm.texi
 # \r is not portable to Solaris tr, therefore we have a special
 # case for ASCII.  We use \r for other encodings like EBCDIC.
 s-tm-texi: build/genhooks$(build_exeext) $(srcdir)/doc/tm.texi.in
-	$(RUN_GEN) build/genhooks$(build_exeext) -d \
-			$(srcdir)/doc/tm.texi.in > tmp-tm.texi
-	case `echo X|tr X '\101'` in \
-	  A) tr -d '\015' < tmp-tm.texi > tmp2-tm.texi ;; \
-	  *) tr -d '\r' < tmp-tm.texi > tmp2-tm.texi ;; \
-	esac
-	mv tmp2-tm.texi tmp-tm.texi
-	$(SHELL) $(srcdir)/../move-if-change tmp-tm.texi tm.texi
-	@if cmp -s $(srcdir)/doc/tm.texi tm.texi; then \
-	  $(STAMP) $@; \
-	elif test $(srcdir)/doc/tm.texi -nt $(srcdir)/doc/tm.texi.in \
-	  && ( test $(srcdir)/doc/tm.texi -nt $(srcdir)/target.def \
-	    || test $(srcdir)/doc/tm.texi -nt $(srcdir)/c-family/c-target.def \
-	    || test $(srcdir)/doc/tm.texi -nt $(srcdir)/common/common-target.def \
-	  ); then \
-	  echo >&2 ; \
-	  echo You should edit $(srcdir)/doc/tm.texi.in rather than $(srcdir)/doc/tm.texi . >&2 ; \
-	  false; \
-	else \
-	  echo >&2 ; \
-	  echo Verify that you have permission to grant a GFDL license for all >&2 ; \
-	  echo new text in tm.texi, then copy it to $(srcdir)/doc/tm.texi. >&2 ; \
-	  false; \
-	fi
+	cat $(srcdir)/doc/tm.texi.in > tmp-tm.texi
+	$(STAMP) $@
 
 GTFILES = $(CPP_ID_DATA_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(host_xm_file_list) \
@@ -2246,7 +2238,7 @@ GTFILES = $(CPP_ID_DATA_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(srcdir)/dwarf2cfi.c \
   $(srcdir)/dwarf2out.c \
   $(srcdir)/tree-vect-generic.c \
-  $(srcdir)/dojump.c \
+  $(srcdir)/dojump.c $(srcdir)/l-ipo.c \
   $(srcdir)/emit-rtl.c $(srcdir)/except.h $(srcdir)/explow.c $(srcdir)/expr.c \
   $(srcdir)/expr.h \
   $(srcdir)/function.c $(srcdir)/except.c \
@@ -2282,9 +2274,7 @@ GTFILES = $(CPP_ID_DATA_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(srcdir)/vtable-verify.c \
   $(srcdir)/asan.c \
   $(srcdir)/ubsan.c \
-  $(srcdir)/tsan.c \
-  $(srcdir)/ipa-devirt.c \
-  $(srcdir)/internal-fn.h \
+  $(srcdir)/tsan.c $(srcdir)/ipa-devirt.c \
   @all_gtfiles@
 
 # Compute the list of GT header files from the corresponding C sources,
@@ -2347,9 +2337,9 @@ build/%.o :  # dependencies provided by explicit rule later
 ## build/version.o is compiled by the $(COMPILER_FOR_BUILD) but needs
 ## several C macro definitions, just like version.o
 build/version.o:  version.c version.h \
-                  $(REVISION) $(DATESTAMP) $(BASEVER) $(DEVPHASE)
+                  $(REVISION) $(DATESTAMP) $(FULLVER) $(DEVPHASE)
 	$(COMPILER_FOR_BUILD) -c $(BUILD_COMPILERFLAGS) $(BUILD_CPPFLAGS) \
-	-DBASEVER=$(BASEVER_s) -DDATESTAMP=$(DATESTAMP_s) \
+	-DBASEVER=$(FULLVER_s) -DDATESTAMP=$(DATESTAMP_s) \
 	-DREVISION=$(REVISION_s) \
 	-DDEVPHASE=$(DEVPHASE_s) -DPKGVERSION=$(PKGVERSION_s) \
 	-DBUGURL=$(BUGURL_s) -o $@ $<
@@ -2430,27 +2420,29 @@ build/gengenrtl.o : gengenrtl.c $(BCONFIG_H) $(SYSTEM_H) rtl.def
 
 gengtype-lex.o build/gengtype-lex.o : gengtype-lex.c gengtype.h $(SYSTEM_H)
 gengtype-lex.o: $(CONFIG_H) $(BCONFIG_H)
-CFLAGS-gengtype-lex.o += -DGENERATOR_FILE
+CFLAGS-build/gengtype-lex.o += -DGENERATOR_FILE
 build/gengtype-lex.o: $(BCONFIG_H)
 
 gengtype-parse.o build/gengtype-parse.o : gengtype-parse.c gengtype.h \
   $(SYSTEM_H)
 gengtype-parse.o: $(CONFIG_H)
-CFLAGS-gengtype-parse.o += -DGENERATOR_FILE
+CFLAGS-build/gengtype-parse.o += -DGENERATOR_FILE
 build/gengtype-parse.o: $(BCONFIG_H)
 
 gengtype-state.o build/gengtype-state.o: gengtype-state.c $(SYSTEM_H) \
   gengtype.h errors.h double-int.h version.h $(HASHTAB_H) $(OBSTACK_H) \
   $(XREGEX_H)
 gengtype-state.o: $(CONFIG_H)
-CFLAGS-gengtype-state.o += -DGENERATOR_FILE
+CFLAGS-gengtype-state.o += -DGENERATOR_FILE2
+CFLAGS-build/gengtype-state.o += -DGENERATOR_FILE
 build/gengtype-state.o: $(BCONFIG_H)
 
 gengtype.o build/gengtype.o : gengtype.c $(SYSTEM_H) gengtype.h 	\
   rtl.def insn-notes.def errors.h double-int.h version.h $(HASHTAB_H) \
   $(OBSTACK_H) $(XREGEX_H)
 gengtype.o: $(CONFIG_H)
-CFLAGS-gengtype.o += -DGENERATOR_FILE
+CFLAGS-gengtype.o += -DGENERATOR_FILE2
+CFLAGS-build/gengtype.o += -DGENERATOR_FILE
 build/gengtype.o: $(BCONFIG_H)
 
 build/genmddeps.o: genmddeps.c $(BCONFIG_H) $(SYSTEM_H) coretypes.h	\
@@ -2515,7 +2507,7 @@ $(genprog:%=build/gen%$(build_exeext)): build/gen%$(build_exeext): build/gen%.o 
 # any system header is included.
 gengtype-lex.c : gengtype-lex.l
 	-$(FLEX) $(FLEXFLAGS) -o$@ $< && { \
-	  echo '#include "bconfig.h"' > $@.tmp; \
+	  echo '' > $@.tmp; \
 	  cat $@ >> $@.tmp; \
 	  mv $@.tmp $@; \
 	}
@@ -2565,13 +2557,36 @@ s-iov: build/gcov-iov$(build_exeext) $(BASEVER) $(DEVPHASE)
 	$(SHELL) $(srcdir)/../move-if-change tmp-gcov-iov.h gcov-iov.h
 	$(STAMP) s-iov
 
-GCOV_OBJS = gcov.o
+GCOV_OBJS = gcov.o vec.o ggc-none.o
 gcov$(exeext): $(GCOV_OBJS) $(LIBDEPS)
 	+$(LINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) $(GCOV_OBJS) $(LIBS) -o $@
-GCOV_DUMP_OBJS = gcov-dump.o
+GCOV_DUMP_OBJS = gcov-dump.o vec.o ggc-none.o
 gcov-dump$(exeext): $(GCOV_DUMP_OBJS) $(LIBDEPS)
 	+$(LINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) $(GCOV_DUMP_OBJS) \
 		$(LIBS) -o $@
+GCOV_TOOL_DEP_FILES = $(srcdir)/../libgcc/libgcov-util.c gcov-io.c $(GCOV_IO_H) \
+  $(srcdir)/../libgcc/libgcov-driver.c $(srcdir)/../libgcc/libgcov-driver-system.c \
+  $(srcdir)/../libgcc/libgcov-merge.c $(srcdir)/../libgcc/libgcov.h \
+  $(SYSTEM_H) coretypes.h $(TM_H) $(CONFIG_H) version.h intl.h $(DIAGNOSTIC_H)
+libgcov-util.o: $(srcdir)/../libgcc/libgcov-util.c $(GCOV_TOOL_DEP_FILES)
+	+$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) -o $@ $<
+libgcov-driver-tool.o: $(srcdir)/../libgcc/libgcov-driver.c $(GCOV_TOOL_DEP_FILES)
+	+$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+	  -DIN_GCOV_TOOL=1 -o $@ $<
+libgcov-merge-tool.o: $(srcdir)/../libgcc/libgcov-merge.c $(GCOV_TOOL_DEP_FILES)
+	+$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+	  -DIN_GCOV_TOOL=1 -o $@ $<
+gcov-tool-dyn-ipa.o: $(srcdir)/../libgcc/dyn-ipa.c $(GCOV_TOOL_DEP_FILES)
+	+$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+	  -DIN_GCOV_TOOL=1 -o $@ $<
+gcov-tool-params.o: params.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(COMMON_TARGET_H) \
+   $(PARAMS_H) $(DIAGNOSTIC_CORE_H)
+	+$(COMPILER) -DIN_GCOV_TOOL=1 -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) \
+          $(INCLUDES) -o $@ $<
+GCOV_TOOL_OBJS = gcov-tool.o libgcov-util.o libgcov-driver-tool.o \
+		 libgcov-merge-tool.o gcov-tool-dyn-ipa.o gcov-tool-params.o
+gcov-tool$(exeext): $(GCOV_TOOL_OBJS) $(LIBDEPS)
+	+$(LINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) $(GCOV_TOOL_OBJS) $(LIBS) -o $@
 #
 # Build the include directories.  The stamp files are stmp-* rather than
 # s-* so that mostlyclean does not force the include directory to
@@ -2730,7 +2745,7 @@ stmp-fixinc: gsyslimits.h macro_list fixinc_list \
 	      gcc_dir=`${PWD_COMMAND}` ; \
 	      export TARGET_MACHINE srcdir SHELL MACRO_LIST && \
 	      cd $(build_objdir)/fixincludes && \
-	      $(SHELL) ./fixinc.sh "$${gcc_dir}/$${fix_dir}" \
+	      $(SHELL) -c true "$${gcc_dir}/$${fix_dir}" \
 	        $(SYSTEM_HEADER_DIR) $(OTHER_FIXINCLUDES_DIRS) ); \
 	    rm -f $${fix_dir}/syslimits.h; \
 	    if [ -f $${fix_dir}/limits.h ]; then \
@@ -2800,7 +2815,7 @@ TEXI_GCC_FILES = gcc.texi gcc-common.texi gcc-vers.texi frontends.texi	\
 	 contribute.texi compat.texi funding.texi gnu.texi gpl_v3.texi	\
 	 fdl.texi contrib.texi cppenv.texi cppopts.texi avr-mmcu.texi	\
 	 implement-c.texi implement-cxx.texi arm-neon-intrinsics.texi	\
-	 arm-acle-intrinsics.texi
+	 arm-acle-intrinsics.texi gcov-tool.texi
 
 # we explicitly use $(srcdir)/doc/tm.texi here to avoid confusion with
 # the generated tm.texi; the latter might have a more recent timestamp,
@@ -2921,7 +2936,8 @@ $(build_htmldir)/gccinstall/index.html: $(TEXI_GCCINSTALL_FILES)
 	DESTDIR=$(@D) \
 	$(SHELL) $(srcdir)/doc/install.texi2html
 
-MANFILES = doc/gcov.1 doc/cpp.1 doc/gcc.1 doc/gfdl.7 doc/gpl.7 doc/fsf-funding.7
+MANFILES = doc/gcov.1 doc/cpp.1 doc/gcc.1 doc/gfdl.7 doc/gpl.7 \
+           doc/fsf-funding.7 doc/gcov-tool.1
 
 generated-manpages: man
 
@@ -3208,6 +3224,13 @@ install-common: native lang.install-common installdirs
 	    rm -f $(DESTDIR)$(bindir)/$(GCOV_INSTALL_NAME)$(exeext); \
 	    $(INSTALL_PROGRAM) gcov$(exeext) $(DESTDIR)$(bindir)/$(GCOV_INSTALL_NAME)$(exeext); \
 	fi
+# Install gcov-tool if it was compiled.
+	-if [ -f gcov-tool$(exeext) ]; \
+	then \
+	    rm -f $(DESTDIR)$(bindir)/$(GCOV_TOOL_INSTALL_NAME)$(exeext); \
+	    $(INSTALL_PROGRAM) \
+	    gcov-tool$(exeext) $(DESTDIR)$(bindir)/$(GCOV_TOOL_INSTALL_NAME)$(exeext); \
+	fi
 
 # Install the driver program as $(target_noncanonical)-gcc,
 # $(target_noncanonical)-gcc-$(version), and also as gcc if native.
@@ -3309,6 +3332,11 @@ $(DESTDIR)$(man1dir)/$(CPP_INSTALL_NAME)$(man1ext): doc/cpp.1 installdirs
 	-chmod a-x $@
 
 $(DESTDIR)$(man1dir)/$(GCOV_INSTALL_NAME)$(man1ext): doc/gcov.1 installdirs
+	-rm -f $@
+	-$(INSTALL_DATA) $< $@
+	-chmod a-x $@
+
+$(DESTDIR)$(man1dir)/$(GCOV_TOOL_INSTALL_NAME)$(man1ext): doc/gcov-tool.1 installdirs
 	-rm -f $@
 	-$(INSTALL_DATA) $< $@
 	-chmod a-x $@

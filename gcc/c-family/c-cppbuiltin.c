@@ -794,66 +794,18 @@ c_cpp_builtins (cpp_reader *pfile)
   /* For stddef.h.  They require macros defined in c-common.c.  */
   c_stddef_cpp_builtins ();
 
-  /* Set include test macros for all C/C++ (not for just C++11 etc.)
-     the builtins __has_include__ and __has_include_next__ are defined
-     in libcpp.  */
-  cpp_define (pfile, "__has_include(STR)=__has_include__(STR)");
-  cpp_define (pfile, "__has_include_next(STR)=__has_include_next__(STR)");
-
   if (c_dialect_cxx ())
     {
       if (flag_weak && SUPPORTS_ONE_ONLY)
 	cpp_define (pfile, "__GXX_WEAK__=1");
       else
 	cpp_define (pfile, "__GXX_WEAK__=0");
-
       if (warn_deprecated)
 	cpp_define (pfile, "__DEPRECATED");
-
       if (flag_rtti)
 	cpp_define (pfile, "__GXX_RTTI");
-
       if (cxx_dialect >= cxx11)
         cpp_define (pfile, "__GXX_EXPERIMENTAL_CXX0X__");
-
-      /* Binary literals have been allowed in g++ before C++11
-	 and were standardized for C++14.  */
-      if (!pedantic || cxx_dialect > cxx11)
-	cpp_define (pfile, "__cpp_binary_literals=201304");
-      if (cxx_dialect >= cxx11)
-	{
-	  /* Set feature test macros for C++11  */
-	  cpp_define (pfile, "__cpp_unicode_characters=200704");
-	  cpp_define (pfile, "__cpp_raw_strings=200710");
-	  cpp_define (pfile, "__cpp_unicode_literals=200710");
-	  cpp_define (pfile, "__cpp_user_defined_literals=200809");
-	  cpp_define (pfile, "__cpp_lambdas=200907");
-	  cpp_define (pfile, "__cpp_constexpr=200704");
-	  cpp_define (pfile, "__cpp_static_assert=200410");
-	  cpp_define (pfile, "__cpp_decltype=200707");
-	  cpp_define (pfile, "__cpp_attributes=200809");
-	  cpp_define (pfile, "__cpp_rvalue_reference=200610");
-	  cpp_define (pfile, "__cpp_variadic_templates=200704");
-	  cpp_define (pfile, "__cpp_alias_templates=200704");
-	}
-      if (cxx_dialect > cxx11)
-	{
-	  /* Set feature test macros for C++14  */
-	  cpp_define (pfile, "__cpp_return_type_deduction=201304");
-	  cpp_define (pfile, "__cpp_init_captures=201304");
-	  cpp_define (pfile, "__cpp_generic_lambdas=201304");
-	  //cpp_undef (pfile, "__cpp_constexpr");
-	  //cpp_define (pfile, "__cpp_constexpr=201304");
-	  cpp_define (pfile, "__cpp_decltype_auto=201304");
-	  //cpp_define (pfile, "__cpp_aggregate_nsdmi=201304");
-	  //cpp_define (pfile, "__cpp_variable_templates=201304");
-	  cpp_define (pfile, "__cpp_digit_separators=201309");
-	  cpp_define (pfile, "__cpp_attribute_deprecated=201309");
-	  //cpp_define (pfile, "__cpp_sized_deallocation=201309");
-	  /* We'll have to see where runtime arrays wind up.
-	     Let's put it in C++14 for now.  */
-	  cpp_define (pfile, "__cpp_runtime_arrays=201304");
-	}
     }
   /* Note that we define this for C as well, so that we know if
      __attribute__((cleanup)) will interface with EH.  */
@@ -1017,6 +969,33 @@ c_cpp_builtins (cpp_reader *pfile)
   if (c_dialect_cxx () && TYPE_UNSIGNED (wchar_type_node))
     cpp_define (pfile, "__WCHAR_UNSIGNED__");
 
+  /* Tell source code if the compiler makes sync_compare_and_swap
+     builtins available.  */
+#ifdef HAVE_sync_compare_and_swapqi
+  if (HAVE_sync_compare_and_swapqi)
+    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1");
+#endif
+
+#ifdef HAVE_sync_compare_and_swaphi
+  if (HAVE_sync_compare_and_swaphi)
+    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2");
+#endif
+
+#ifdef HAVE_sync_compare_and_swapsi
+  if (HAVE_sync_compare_and_swapsi)
+    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4");
+#endif
+
+#ifdef HAVE_sync_compare_and_swapdi
+  if (HAVE_sync_compare_and_swapdi)
+    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8");
+#endif
+
+#ifdef HAVE_sync_compare_and_swapti
+  if (HAVE_sync_compare_and_swapti)
+    cpp_define (pfile, "__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16");
+#endif
+
   cpp_atomic_builtins (pfile);
     
 #ifdef DWARF2_UNWIND_INFO
@@ -1076,6 +1055,8 @@ c_cpp_builtins (cpp_reader *pfile)
      format.  */
   if (ENABLE_DECIMAL_FLOAT && ENABLE_DECIMAL_BID_FORMAT)
     cpp_define (pfile, "__DECIMAL_BID_FORMAT__");
+  if (c_dialect_cxx () && flag_sized_delete)
+    cpp_define (pfile, "__GXX_DELETE_WITH_SIZE__");
 }
 
 /* Pass an object-like macro.  If it doesn't lie in the user's

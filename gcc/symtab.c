@@ -92,7 +92,7 @@ eq_node (const void *p1, const void *p2)
 
 /* Hash asmnames ignoring the user specified marks.  */
 
-static hashval_t
+hashval_t
 decl_assembler_name_hash (const_tree asmname)
 {
   if (IDENTIFIER_POINTER (asmname)[0] == '*')
@@ -123,7 +123,7 @@ hash_node_by_assembler_name (const void *p)
 
 /* Compare ASMNAME with the DECL_ASSEMBLER_NAME of DECL.  */
 
-static bool
+bool
 decl_assembler_name_equal (tree decl, const_tree asmname)
 {
   tree decl_asmname = DECL_ASSEMBLER_NAME (decl);
@@ -189,7 +189,7 @@ eq_assembler_name (const void *p1, const void *p2)
 
 /* Insert NODE to assembler name hash.  */
 
-static void
+void
 insert_to_assembler_name_hash (symtab_node *node, bool with_clones)
 {
   if (is_a <varpool_node> (node) && DECL_HARD_REGISTER (node->decl))
@@ -225,7 +225,7 @@ insert_to_assembler_name_hash (symtab_node *node, bool with_clones)
 
 /* Remove NODE from assembler name hash.  */
 
-static void
+void
 unlink_from_assembler_name_hash (symtab_node *node, bool with_clones)
 {
   if (assembler_name_hash)
@@ -969,7 +969,6 @@ symtab_make_decl_local (tree decl)
   DECL_VISIBILITY_SPECIFIED (decl) = 0;
   DECL_VISIBILITY (decl) = VISIBILITY_DEFAULT;
   TREE_PUBLIC (decl) = 0;
-  DECL_DLLIMPORT_P (decl) = 0;
   if (!DECL_RTL_SET_P (decl))
     return;
 
@@ -1223,7 +1222,6 @@ symtab_nonoverwritable_alias (symtab_node *node)
 
   /* Otherwise create a new one.  */
   new_decl = copy_node (node->decl);
-  DECL_DLLIMPORT_P (new_decl) = 0;
   DECL_NAME (new_decl) = clone_function_name (node->decl, "localalias");
   if (TREE_CODE (new_decl) == FUNCTION_DECL)
     DECL_STRUCT_FUNCTION (new_decl) = NULL;

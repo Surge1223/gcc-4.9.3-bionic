@@ -3631,6 +3631,9 @@ case "${target}" in
   arc-*-*|arceb-*-*)
     noconfigdirs="$noconfigdirs target-libgloss"
     ;;
+  arm*-*-linux-androideabi)
+    noconfigdirs="$noconfigdirs target-libiberty"
+    ;;
   arm-*-pe*)
     noconfigdirs="$noconfigdirs target-libgloss"
     ;;
@@ -3778,7 +3781,7 @@ case "${target}" in
   microblaze*)
     noconfigdirs="$noconfigdirs gprof"
     ;;
-  mips*-sde-elf* | mips*-mti-elf*)
+  mips*-sde-elf* | mips*-mti-elf* | mips*-img-elf*)
     if test x$with_newlib = xyes; then
       noconfigdirs="$noconfigdirs gprof"
     fi
@@ -3868,7 +3871,7 @@ fi
   *-mingw*)
     host_makefile_frag="config/mh-mingw"
     ;;
-  alpha*-linux*)
+  alpha*-*-linux*)
     host_makefile_frag="config/mh-alpha-linux"
     ;;
   hppa*-hp-hpux10*)
@@ -6322,6 +6325,8 @@ esac
 if test $target_elf = yes; then :
   # ELF platforms build the lto-plugin always.
   build_lto_plugin=yes
+  # Allow ELF platforms to build the function_reordering_plugin always.
+  build_function_reordering_plugin=yes
 
 else
   if test x"$default_enable_lto" = x"yes" ; then
@@ -6464,6 +6469,10 @@ if test -d ${srcdir}/gcc; then
       configdirs="$configdirs lto-plugin"
       extra_host_libiberty_configure_flags=--enable-shared
     fi
+  fi
+  if test "${build_function_reordering_plugin}" = "yes" ; then
+    configdirs="$configdirs function_reordering_plugin"
+    extra_host_libiberty_configure_flags=--enable-shared
   fi
 
 
@@ -7035,7 +7044,7 @@ case "${target}" in
   spu-*-*)
     target_makefile_frag="config/mt-spu"
     ;;
-  mips*-sde-elf* | mips*-mti-elf*)
+  mips*-sde-elf* | mips*-mti-elf* | mips*-img-elf*)
     target_makefile_frag="config/mt-sde"
     ;;
   mipsisa*-*-elfoabi*)
@@ -7837,7 +7846,7 @@ done
 test -n "$YACC" || YACC="$MISSING bison -y"
 
 case " $build_configdirs " in
-  *" bison "*) YACC='$$r/$(BUILD_SUBDIR)/bison/tests/bison -y' ;;
+  *" bison "*) YACC=' $$r/$(BUILD_SUBDIR)/bison/tests/bison -y' ;;
 esac
 
 for ac_prog in bison
@@ -7884,7 +7893,7 @@ done
 test -n "$BISON" || BISON="$MISSING bison"
 
 case " $build_configdirs " in
-  *" bison "*) BISON='$$r/$(BUILD_SUBDIR)/bison/tests/bison' ;;
+  *" bison "*) BISON=' $$r/$(BUILD_SUBDIR)/bison/tests/bison' ;;
 esac
 
 for ac_prog in gm4 gnum4 m4
@@ -7931,7 +7940,7 @@ done
 test -n "$M4" || M4="$MISSING m4"
 
 case " $build_configdirs " in
-  *" m4 "*) M4='$$r/$(BUILD_SUBDIR)/m4/m4' ;;
+  *" m4 "*) M4=' $$r/$(BUILD_SUBDIR)/m4/m4' ;;
 esac
 
 for ac_prog in flex lex
@@ -7978,8 +7987,8 @@ done
 test -n "$LEX" || LEX="$MISSING flex"
 
 case " $build_configdirs " in
-  *" flex "*) LEX='$$r/$(BUILD_SUBDIR)/flex/flex' ;;
-  *" lex "*) LEX='$$r/$(BUILD_SUBDIR)/lex/lex' ;;
+  *" flex "*) LEX=' $$r/$(BUILD_SUBDIR)/flex/flex' ;;
+  *" lex "*) LEX=' $$r/$(BUILD_SUBDIR)/lex/lex' ;;
 esac
 
 for ac_prog in flex
@@ -8026,7 +8035,7 @@ done
 test -n "$FLEX" || FLEX="$MISSING flex"
 
 case " $build_configdirs " in
-  *" flex "*) FLEX='$$r/$(BUILD_SUBDIR)/flex/flex' ;;
+  *" flex "*) FLEX=' $$r/$(BUILD_SUBDIR)/flex/flex' ;;
 esac
 
 for ac_prog in makeinfo
@@ -8073,7 +8082,7 @@ done
 test -n "$MAKEINFO" || MAKEINFO="$MISSING makeinfo"
 
 case " $build_configdirs " in
-  *" texinfo "*) MAKEINFO='$$r/$(BUILD_SUBDIR)/texinfo/makeinfo/makeinfo' ;;
+  *" texinfo "*) MAKEINFO=' $$r/$(BUILD_SUBDIR)/texinfo/makeinfo/makeinfo' ;;
   *)
 
     # For an installed makeinfo, we require it to be from texinfo 4.7 or
@@ -8135,7 +8144,7 @@ test -n "$EXPECT" || EXPECT="expect"
 
 case " $configdirs " in
   *" expect "*)
-    test $host = $build && EXPECT='$$r/$(HOST_SUBDIR)/expect/expect'
+    test $host = $build && EXPECT=' $$r/$(HOST_SUBDIR)/expect/expect'
     ;;
 esac
 
@@ -8184,7 +8193,7 @@ test -n "$RUNTEST" || RUNTEST="runtest"
 
 case " $configdirs " in
   *" dejagnu "*)
-    test $host = $build && RUNTEST='$$s/$(HOST_SUBDIR)/dejagnu/runtest'
+    test $host = $build && RUNTEST=' $$ss/$(HOST_SUBDIR)/dejagnu/runtest'
     ;;
 esac
 
@@ -13801,7 +13810,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    AR_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/ar'
+    AR_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/ar'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$AR_FOR_TARGET" : "x/" > /dev/null; then
@@ -13843,7 +13852,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    AS_FOR_TARGET='$$r/$(HOST_SUBDIR)/gas/as-new'
+    AS_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gas/as-new'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$AS_FOR_TARGET" : "x/" > /dev/null; then
@@ -13885,7 +13894,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    CC_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/xgcc -B$$r/$(HOST_SUBDIR)/gcc/'
+    CC_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/xgcc -B$$r/$(HOST_SUBDIR)/gcc/'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$CC_FOR_TARGET" : "x/" > /dev/null; then
@@ -13930,7 +13939,7 @@ else
   esac
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    CXX_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/xg++ -B$$r/$(HOST_SUBDIR)/gcc/ -nostdinc++ `if test -f $$r/$(TARGET_SUBDIR)/libstdc++-v3/scripts/testsuite_flags; then $(SHELL) $$r/$(TARGET_SUBDIR)/libstdc++-v3/scripts/testsuite_flags --build-includes; else echo -funconfigured-libstdc++-v3 ; fi` -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src/.libs -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs'
+    CXX_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/xg++ -B$$r/$(HOST_SUBDIR)/gcc/ -nostdinc++ `if test -f $$r/$(TARGET_SUBDIR)/libstdc++-v3/scripts/testsuite_flags; then $(SHELL) $$r/$(TARGET_SUBDIR)/libstdc++-v3/scripts/testsuite_flags --build-includes; else echo -funconfigured-libstdc++-v3 ; fi` -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src/.libs -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$CXX_FOR_TARGET" : "x/" > /dev/null; then
@@ -13975,7 +13984,7 @@ else
   esac
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    RAW_CXX_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/xgcc -shared-libgcc -B$$r/$(HOST_SUBDIR)/gcc -nostdinc++ -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src/.libs -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs'
+    RAW_CXX_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/xgcc -shared-libgcc -B$$r/$(HOST_SUBDIR)/gcc -nostdinc++ -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src/.libs -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$RAW_CXX_FOR_TARGET" : "x/" > /dev/null; then
@@ -14017,7 +14026,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    DLLTOOL_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/dlltool'
+    DLLTOOL_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/dlltool'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$DLLTOOL_FOR_TARGET" : "x/" > /dev/null; then
@@ -14059,7 +14068,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    GCC_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/xgcc -B$$r/$(HOST_SUBDIR)/gcc/'
+    GCC_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/xgcc -B$$r/$(HOST_SUBDIR)/gcc/'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$GCC_FOR_TARGET" : "x/" > /dev/null; then
@@ -14104,7 +14113,7 @@ else
   esac
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    GCJ_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/gcj -B$$r/$(HOST_SUBDIR)/gcc/'
+    GCJ_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/gcj -B$$r/$(HOST_SUBDIR)/gcc/'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$GCJ_FOR_TARGET" : "x/" > /dev/null; then
@@ -14149,7 +14158,7 @@ else
   esac
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    GFORTRAN_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/gfortran -B$$r/$(HOST_SUBDIR)/gcc/'
+    GFORTRAN_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/gfortran -B$$r/$(HOST_SUBDIR)/gcc/'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$GFORTRAN_FOR_TARGET" : "x/" > /dev/null; then
@@ -14194,7 +14203,7 @@ else
   esac
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    GOC_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/gccgo -B$$r/$(HOST_SUBDIR)/gcc/'
+    GOC_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/gccgo -B$$r/$(HOST_SUBDIR)/gcc/'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$GOC_FOR_TARGET" : "x/" > /dev/null; then
@@ -14236,7 +14245,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    LD_FOR_TARGET='$$r/$(HOST_SUBDIR)/ld/ld-new'
+    LD_FOR_TARGET=' $$r/$(HOST_SUBDIR)/ld/ld-new'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$LD_FOR_TARGET" : "x/" > /dev/null; then
@@ -14309,7 +14318,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    NM_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/nm-new'
+    NM_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/nm-new'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$NM_FOR_TARGET" : "x/" > /dev/null; then
@@ -14351,7 +14360,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    OBJDUMP_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/objdump'
+    OBJDUMP_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/objdump'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$OBJDUMP_FOR_TARGET" : "x/" > /dev/null; then
@@ -14393,7 +14402,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    RANLIB_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/ranlib'
+    RANLIB_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/ranlib'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$RANLIB_FOR_TARGET" : "x/" > /dev/null; then
@@ -14435,7 +14444,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    READELF_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/readelf'
+    READELF_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/readelf'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$READELF_FOR_TARGET" : "x/" > /dev/null; then
@@ -14477,7 +14486,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    STRIP_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/strip-new'
+    STRIP_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/strip-new'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$STRIP_FOR_TARGET" : "x/" > /dev/null; then
@@ -14519,7 +14528,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    WINDRES_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/windres'
+    WINDRES_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/windres'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$WINDRES_FOR_TARGET" : "x/" > /dev/null; then
@@ -14561,7 +14570,7 @@ else
 
   if test $ok = yes; then
     # An in-tree tool is available and we can use it
-    WINDMC_FOR_TARGET='$$r/$(HOST_SUBDIR)/binutils/windmc'
+    WINDMC_FOR_TARGET=' $$r/$(HOST_SUBDIR)/binutils/windmc'
     { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
 $as_echo "just compiled" >&6; }
   elif expr "x$WINDMC_FOR_TARGET" : "x/" > /dev/null; then
@@ -14598,9 +14607,9 @@ COMPILER_NM_FOR_TARGET='$(NM_FOR_TARGET)'
 if test $host = $build; then
   case " $configdirs " in
     *" gcc "*)
-      COMPILER_AS_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/as'
-      COMPILER_LD_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/collect-ld'
-      COMPILER_NM_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/nm'${extra_nmflags_for_target}
+      COMPILER_AS_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/as'
+      COMPILER_LD_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/collect-ld'
+      COMPILER_NM_FOR_TARGET=' $$r/$(HOST_SUBDIR)/gcc/nm'${extra_nmflags_for_target}
       ;;
   esac
 fi
@@ -14694,8 +14703,8 @@ fi
 compare_exclusions="gcc/cc*-checksum\$(objext) | gcc/ada/*tools/*"
 case "$target" in
   hppa*64*-*-hpux*) ;;
-  hppa*-*-hpux*) compare_exclusions="gcc/cc*-checksum\$(objext) | */libgcc/lib2funcs* | gcc/ada/*tools/*" ;;
-  powerpc*-ibm-aix*) compare_exclusions="gcc/cc*-checksum\$(objext) | gcc/ada/*tools/* | *libgomp*\$(objext)" ;;
+  hppa*-*-hpux*) compare_exclusions=" gcc/cc*-checksum\$(objext) | */libgcc/lib2funcs* | gcc/ada/*tools/*" ;;
+  powerpc*-ibm-aix*) compare_exclusions=" gcc/cc*-checksum\$(objext) | gcc/ada/*tools/* | *libgomp*\$(objext)" ;;
 esac
 
 

@@ -1062,10 +1062,10 @@ case "$THREADS" in
  posix)
     case "$host" in
      *-*-cygwin*)
-	# Don't set THREADLIBS here.  Cygwin doesn't have -lpthread.
+	# Don't set THREADLIBS here.  Cygwin doesn't have .
 	;;
      *-*-freebsd[[34]].*)
-	# Before FreeBSD 5, it didn't have -lpthread (or any library which
+	# Before FreeBSD 5, it didn't have  (or any library which
 	# merely adds pthread_* functions) but it does have a -pthread switch
 	# which is required at link-time to select -lc_r *instead* of -lc.
 	THREADLDFLAGS=-pthread
@@ -1078,28 +1078,28 @@ case "$THREADS" in
 	;;
      *-*-freebsd*)
 	# FreeBSD >=5.3 implements a model much closer to other modern UNIX
-	# systems which support threads and -lpthread.
+	# systems which support threads and .
 	THREADLDFLAGS=-pthread
-	THREADSPEC=-lpthread
+	THREADSPEC=
 	;;
      hppa*-hp-hpux*)
 	THREADCXXFLAGS=-pthread
 	# boehm-gc needs some functions from librt, so link that too.
-	THREADLIBS='-lpthread -lrt'
-	THREADSPEC='-lpthread -lrt'
+	THREADLIBS=' -lrt'
+	THREADSPEC=' -lrt'
 	;;
      *-*-solaris2.9)
 	# Need libthread for TLS support.
-	THREADLIBS='-lpthread -lthread'
-	THREADSPEC='-lpthread -lthread'
+	THREADLIBS=' -lthread'
+	THREADSPEC=' -lthread'
 	;;
      *-*-darwin*)
 	# Don't set THREADLIBS or THREADSPEC as Darwin already
 	# provides pthread via libSystem.
 	;;
      *)
-	THREADLIBS=-lpthread
-	THREADSPEC=-lpthread
+	THREADLIBS=
+	THREADSPEC=
 	;;
     esac
     THREADH=posix-threads.h

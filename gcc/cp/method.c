@@ -362,8 +362,10 @@ use_thunk (tree thunk_fndecl, bool emit_p)
 	{
 	  resolve_unique_section (thunk_fndecl, 0, flag_function_sections);
 
-	  /* Output the thunk into the same section as function.  */
-	  DECL_SECTION_NAME (thunk_fndecl) = DECL_SECTION_NAME (function);
+	  /* Output the thunk into the same section as function if function reordering
+	     is not switched on.  */
+	  if (!flag_reorder_functions)
+	    DECL_SECTION_NAME (thunk_fndecl) = DECL_SECTION_NAME (function);
 	}
     }
 
@@ -1773,7 +1775,6 @@ implicitly_declare_fn (special_function_kind kind, tree type,
   DECL_EXTERNAL (fn) = true;
   DECL_NOT_REALLY_EXTERN (fn) = 1;
   DECL_DECLARED_INLINE_P (fn) = 1;
-  note_comdat_fn (fn);
   gcc_assert (!TREE_USED (fn));
 
   /* Restore PROCESSING_TEMPLATE_DECL.  */

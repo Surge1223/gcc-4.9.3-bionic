@@ -1011,7 +1011,6 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	  unsigned int set_nregs = 0;
 	  unsigned int regno;
 	  rtx exp;
-	  hard_reg_set_iterator hrsi;
 
 	  for (exp = CALL_INSN_FUNCTION_USAGE (insn); exp; exp = XEXP (exp, 1))
 	    {
@@ -1030,8 +1029,10 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 		}
 	    }
 
-	  EXECUTE_IF_SET_IN_HARD_REG_SET (regs_invalidated_by_call, 0, regno, hrsi)
-	    if (regno < set_regno || regno >= set_regno + set_nregs)
+	  for (regno = 0; regno < FIRST_PSEUDO_REGISTER; regno++)
+	    if ((TEST_HARD_REG_BIT (regs_invalidated_by_call, regno)
+		 || HARD_REGNO_CALL_PART_CLOBBERED (regno, vd->e[regno].mode))
+		&& (regno < set_regno || regno >= set_regno + set_nregs))
 	      kill_value_regno (regno, 1, vd);
 
 	  /* If SET was seen in CALL_INSN_FUNCTION_USAGE, and SET_SRC
@@ -1039,17 +1040,7 @@ copyprop_hardreg_forward_1 (basic_block bb, struct value_data *vd)
 	     but instead among CLOBBERs on the CALL_INSN, we could wrongly
 	     assume the value in it is still live.  */
 	  if (ksvd.ignore_set_reg)
-	    {
-	      note_stores (PATTERN (insn), kill_clobbered_value, vd);
-	      for (exp = CALL_INSN_FUNCTION_USAGE (insn);
-		   exp;
-		   exp = XEXP (exp, 1))
-		{
-		  rtx x = XEXP (exp, 0);
-		  if (GET_CODE (x) == CLOBBER)
-		    kill_value (SET_DEST (x), vd);
-		}
-	    }
+	    note_stores (PATTERN (insn), kill_clobbered_value, vd);
 	}
 
       /* Notice stores.  */

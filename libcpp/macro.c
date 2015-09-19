@@ -250,7 +250,11 @@ _cpp_builtin_macro_text (cpp_reader *pfile, cpp_hashnode *node)
 		struct tm *tb = NULL;
 		struct stat *st = _cpp_get_file_stat (file);
 		if (st)
-		  tb = localtime (&st->st_mtime);
+ 		  {
+ 		    time_t tt = (time_t) st->st_mtime;
+ 		    tb = localtime (&tt);
+ 		    st->st_mtime = tt;
+ 		  }
 		if (tb)
 		  {
 		    char *str = asctime (tb);

@@ -574,6 +574,9 @@ struct GTY(()) function {
   /* Last statement uid.  */
   int last_stmt_uid;
 
+  /* Function's module id.  */
+  unsigned module_id;
+
   /* Function sequence number for profiling, debugging, etc.  */
   int funcdef_no;
 
@@ -591,6 +594,9 @@ struct GTY(()) function {
      being copied; this applies to both versioning and inlining.  Set to
      a string describing the reason for failure.  */
   const char * GTY((skip)) cannot_be_copied_reason;
+
+  /* Last assigned dependence info clique.  */
+  unsigned short last_clique;
 
   /* Collected bit flags.  */
 
@@ -672,9 +678,53 @@ struct GTY(()) function {
   unsigned int tail_call_marked : 1;
 };
 
+#if 0
+#define EXTRACT_MODULE_ID_FROM_GLOBAL_ID(gid) (unsigned)(((gid) >> FUNC_ID_WIDTH) & FUNC_ID_MASK)
+#define EXTRACT_FUNC_ID_FROM_GLOBAL_ID(gid) (unsigned)((gid) & FUNC_ID_MASK)
+#define FUNC_DECL_MODULE_ID(func) EXTRACT_MODULE_ID_FROM_GLOBAL_ID ((func)->funcdef_no + 1)
+#define FUNC_DECL_FUNC_ID(func) EXTRACT_FUNC_ID_FROM_GLOBAL_ID ((func)->funcdef_no + 1)
+#define FUNC_DECL_GLOBAL_ID(func) ((func)->funcdef_no + 1)
+#define GEN_FUNC_GLOBAL_ID(m,f) ((((HOST_WIDE_INT) (m)) << FUNC_ID_WIDTH) | (f))
+#endif
+
+/* The bit width of function id in the global function id used
+   in LIPO.  */
+#define FUNC_ID_WIDTH HOST_BITS_PER_WIDEST_INT / 2
+/* The mask to extract function id from the global function id.  */
+#define FUNC_ID_MASK ((1ll << FUNC_ID_WIDTH) - 1)
+/* Macro to extract module id from global function id GID.  */
+#define EXTRACT_MODULE_ID_FROM_GLOBAL_ID(gid) (unsigned)(((gid) >>\
+                                        FUNC_ID_WIDTH) & FUNC_ID_MASK)
+/* Macro to extract function id from global function id GID.  */
+#define EXTRACT_FUNC_ID_FROM_GLOBAL_ID(gid) (unsigned)((gid) & FUNC_ID_MASK)
+/* Macro to generate a global function id from module id M and
+   function id F.  */
+#define GEN_FUNC_GLOBAL_ID(m,f) ((((HOST_WIDEST_INT) (m)) << FUNC_ID_WIDTH)\
+                                 | (f))
+/* Access macro for module_id field of function FUNC.  */
+#define FUNC_DECL_MODULE_ID(func) ((func)->module_id)
+/* Access macro for funcdef_no field of function FUNC.  */
+#define FUNC_DECL_FUNC_ID(func)   ((func)->funcdef_no + 1)
+/* Macro to compute global function id for FUNC.  */
+#define FUNC_DECL_GLOBAL_ID(func) \
+  GEN_FUNC_GLOBAL_ID (FUNC_DECL_MODULE_ID (func), FUNC_DECL_FUNC_ID (func))
+#if FUNC_ID_WIDTH == 16
+/* 32 bit wide unique id used for asm label (limit: 30k modules,
+   128k funcs per module.  */
+#define FUNC_LABEL_ID(func) ((FUNC_DECL_MODULE_ID (func) << 18) +\
+                             (func)->funcdef_no)
+#else
+#define FUNC_LABEL_ID(func) (((unsigned long)(FUNC_DECL_MODULE_ID (func)) << 32) +\
+                             (func)->funcdef_no)
+#endif
+
 /* Add the decl D to the local_decls list of FUN.  */
 
-void add_local_decl (struct function *fun, tree d);
+static inline void
+add_local_decl (struct function *fun, tree d)
+{
+  vec_safe_push (fun->local_decls, d);
+}
 
 #define FOR_EACH_LOCAL_DECL(FUN, I, D)		\
   FOR_EACH_VEC_SAFE_ELT_REVERSE ((FUN)->local_decls, I, D)
@@ -804,6 +854,9 @@ extern void used_types_insert (tree);
 
 extern int get_next_funcdef_no (void);
 extern int get_last_funcdef_no (void);
+
+extern void reset_funcdef_no (void);
+extern void set_funcdef_no (int);
 
 #ifdef HAVE_simple_return
 extern bool requires_stack_frame_p (rtx, HARD_REG_SET, HARD_REG_SET);

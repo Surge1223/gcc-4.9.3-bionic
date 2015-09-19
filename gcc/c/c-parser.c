@@ -6103,8 +6103,8 @@ c_parser_binary_expression (c_parser *parser, struct c_expr *after,
     if (__builtin_expect (omp_atomic_lhs != NULL_TREE, 0) && sp == 1	      \
 	&& c_parser_peek_token (parser)->type == CPP_SEMICOLON		      \
 	&& ((1 << stack[sp].prec)					      \
-	    & ((1 << PREC_BITOR) | (1 << PREC_BITXOR) | (1 << PREC_BITAND)    \
-	       | (1 << PREC_SHIFT) | (1 << PREC_ADD) | (1 << PREC_MULT)))     \
+	    & (1 << (PREC_BITOR | PREC_BITXOR | PREC_BITAND | PREC_SHIFT      \
+		     | PREC_ADD | PREC_MULT)))				      \
 	&& stack[sp].op != TRUNC_MOD_EXPR				      \
 	&& stack[0].expr.value != error_mark_node			      \
 	&& stack[1].expr.value != error_mark_node			      \
@@ -9764,10 +9764,7 @@ c_parser_omp_variable_list (c_parser *parser,
 
 		  c_parser_consume_token (parser);
 		  if (!c_parser_next_token_is (parser, CPP_COLON))
-		    {
-		      low_bound = c_parser_expression (parser).value;
-		      mark_exp_read (low_bound);
-		    }
+		    low_bound = c_parser_expression (parser).value;
 		  if (c_parser_next_token_is (parser, CPP_CLOSE_SQUARE))
 		    length = integer_one_node;
 		  else
@@ -9780,10 +9777,7 @@ c_parser_omp_variable_list (c_parser *parser,
 			  break;
 			}
 		      if (!c_parser_next_token_is (parser, CPP_CLOSE_SQUARE))
-			{
-			  length = c_parser_expression (parser).value;
-			  mark_exp_read (length);
-			}
+			length = c_parser_expression (parser).value;
 		    }
 		  /* Look for the closing `]'.  */
 		  if (!c_parser_require (parser, CPP_CLOSE_SQUARE,
@@ -11423,7 +11417,6 @@ restart:
 	    {
 	    case MULT_EXPR:
 	    case TRUNC_DIV_EXPR:
-	    case RDIV_EXPR:
 	    case PLUS_EXPR:
 	    case MINUS_EXPR:
 	    case LSHIFT_EXPR:

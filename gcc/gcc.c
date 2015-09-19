@@ -534,7 +534,7 @@ proper position among the other output files.  */
    shared library ordering, and we keep the wrapper function in
    libgcc.  This is not yet a real spec, though it could become one;
    it is currently just stuffed into LINK_SPEC.  FIXME: This wrapping
-   only works with GNU ld and gold.  */
+   only works with GNU ld, gold and mcld.  */
 #define STACK_SPLIT_SPEC " %{fsplit-stack: --wrap=pthread_create}"
 
 #ifndef LIBASAN_SPEC
@@ -576,19 +576,13 @@ proper position among the other output files.  */
 #ifndef LIBLSAN_SPEC
 #define STATIC_LIBLSAN_LIBS \
   " %{static-liblsan:%:include(libsanitizer.spec)%(link_liblsan)}"
-#ifdef LIBLSAN_EARLY_SPEC
-#define LIBLSAN_SPEC STATIC_LIBLSAN_LIBS
-#elif defined(HAVE_LD_STATIC_DYNAMIC)
-#define LIBLSAN_SPEC "%{static-liblsan:" LD_STATIC_OPTION \
+#ifdef HAVE_LD_STATIC_DYNAMIC
+#define LIBLSAN_SPEC "%{!shared:%{static-liblsan:" LD_STATIC_OPTION \
 		     "} -llsan %{static-liblsan:" LD_DYNAMIC_OPTION "}" \
-		     STATIC_LIBLSAN_LIBS
+		     STATIC_LIBLSAN_LIBS "}"
 #else
-#define LIBLSAN_SPEC "-llsan" STATIC_LIBLSAN_LIBS
+#define LIBLSAN_SPEC "%{!shared:-llsan" STATIC_LIBLSAN_LIBS "}"
 #endif
-#endif
-
-#ifndef LIBLSAN_EARLY_SPEC
-#define LIBLSAN_EARLY_SPEC ""
 #endif
 
 #ifndef LIBUBSAN_SPEC
@@ -678,9 +672,9 @@ proper position among the other output files.  */
 
 #ifndef LINK_PIE_SPEC
 #ifdef HAVE_LD_PIE
-#define LINK_PIE_SPEC "%{pie:-pie} "
+#define LINK_PIE_SPEC "%{pie:-pie} %{no-pie:}"
 #else
-#define LINK_PIE_SPEC "%{pie:} "
+#define LINK_PIE_SPEC "%{pie:} %{no-pie:}"
 #endif
 #endif
 
@@ -726,15 +720,15 @@ proper position among the other output files.  */
 #ifndef SANITIZER_EARLY_SPEC
 #define SANITIZER_EARLY_SPEC "\
 %{!nostdlib:%{!nodefaultlibs:%{%:sanitize(address):" LIBASAN_EARLY_SPEC "} \
-    %{%:sanitize(thread):" LIBTSAN_EARLY_SPEC "} \
-    %{%:sanitize(leak):" LIBLSAN_EARLY_SPEC "}}}"
+    %{%:sanitize(thread):" LIBTSAN_EARLY_SPEC "}}}"
 #endif
 
 /* Linker command line options for -fsanitize= late on the command line.  */
 #ifndef SANITIZER_SPEC
 #define SANITIZER_SPEC "\
 %{!nostdlib:%{!nodefaultlibs:%{%:sanitize(address):" LIBASAN_SPEC "\
-    %{static:%ecannot specify -static with -fsanitize=address}}\
+    %{static:%ecannot specify -static with -fsanitize=address}\
+    %{%:sanitize(thread):%e-fsanitize=address is incompatible with -fsanitize=thread}}\
     %{%:sanitize(thread):" LIBTSAN_SPEC "\
     %{!pie:%{!shared:%e-fsanitize=thread linking must be done with -pie or -shared}}}\
     %{%:sanitize(undefined):" LIBUBSAN_SPEC "}\
@@ -765,8 +759,11 @@ proper position among the other output files.  */
 %{!fsyntax-only:%{!c:%{!M:%{!MM:%{!E:%{!S:\
     %(linker) " \
     LINK_PLUGIN_SPEC \
+   "%{freorder-functions=*: \
+    -plugin %(func_reorder_linker_plugin_file) \
+    -plugin-opt=%(func_reorder_linker_plugin_opt)}" \
    "%{flto|flto=*:%<fcompare-debug*} \
-    %{flto} %{fno-lto} %{flto=*} %l " LINK_PIE_SPEC \
+    %{flto} %{flto=*} %l " LINK_PIE_SPEC \
    "%{fuse-ld=*:-fuse-ld=%*}\
     %X %{o*} %{e*} %{N} %{n} %{r}\
     %{s} %{t} %{u*} %{z} %{Z} %{!nostdlib:%{!nostartfiles:%S}} " VTABLE_VERIFICATION_SPEC " \
@@ -775,7 +772,8 @@ proper position among the other output files.  */
     %{fcilkplus:%:include(libcilkrts.spec)%(link_cilkrts)}\
     %{fgnu-tm:%:include(libitm.spec)%(link_itm)}\
     %(mflib) " STACK_SPLIT_SPEC "\
-    %{fprofile-arcs|fprofile-generate*|coverage:-lgcov} " SANITIZER_SPEC " \
+    %{fprofile-arcs|fprofile-generate*|coverage:-lgcov " \
+      LINUX_OR_ANDROID_LD("", "-lgcc") "}" SANITIZER_SPEC " \
     %{!nostdlib:%{!nodefaultlibs:%(link_ssp) %(link_gcc_c_sequence)}}\
     %{!nostdlib:%{!nostartfiles:%E}} %{T*} }}}}}}"
 #endif
@@ -817,6 +815,8 @@ static const char *endfile_spec = ENDFILE_SPEC;
 static const char *startfile_spec = STARTFILE_SPEC;
 static const char *linker_name_spec = LINKER_NAME;
 static const char *linker_plugin_file_spec = "";
+static const char *func_reorder_linker_plugin_file_spec = "";
+static const char *func_reorder_linker_plugin_opt = "";
 static const char *lto_wrapper_spec = "";
 static const char *lto_gcc_spec = "";
 static const char *link_command_spec = LINK_COMMAND_SPEC;
@@ -882,7 +882,7 @@ static const char *cc1_options =
  %{-help=*:--help=%*}\
  %{!fsyntax-only:%{S:%W{o*}%{!o*:-o %b.s}}}\
  %{fsyntax-only:-o %j} %{-param*}\
- %{coverage:-fprofile-arcs -ftest-coverage}";
+ %{coverage:-fprofile-arcs -ftest-coverage -fno-early-inlining}";
 
 static const char *asm_options =
 "%{-target-help:%:print-asm-header()} "
@@ -1192,12 +1192,35 @@ static const char *gcc_libexec_prefix;
 
 /* Default prefixes to attach to command names.  */
 
+
+#if defined(ANDROID) || defined(__ANDROID__)
+#ifndef STANDARD_STARTFILE_PREFIX_1
+#define STANDARD_STARTFILE_PREFIX_1 "/system/lib/"
+#endif
+#ifndef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_2 "/data/toolchain/lib/"
+#endif
+#ifndef STANDARD_STARTFILE_PREFIX_3
+#define STANDARD_STARTFILE_PREFIX_3 "/data/toolchain/sysroot/usr/lib/"
+#endif
+#ifndef STANDARD_STARTFILE_PREFIX_4
+#define STANDARD_STARTFILE_PREFIX_4 "/data/toolchain/usr/lib"
+#endif
+#else
 #ifndef STANDARD_STARTFILE_PREFIX_1
 #define STANDARD_STARTFILE_PREFIX_1 "/lib/"
 #endif
 #ifndef STANDARD_STARTFILE_PREFIX_2
 #define STANDARD_STARTFILE_PREFIX_2 "/usr/lib/"
 #endif
+#ifndef STANDARD_STARTFILE_PREFIX_3
+#define STANDARD_STARTFILE_PREFIX_3 "/vendor/lib/"
+#endif
+#ifndef STANDARD_STARTFILE_PREFIX_4
+#define STANDARD_STARTFILE_PREFIX_4 "/data/toolchain/lib/"
+#endif
+#endif
+
 
 #ifdef CROSS_DIRECTORY_STRUCTURE  /* Don't use these prefixes for a cross compiler.  */
 #undef MD_EXEC_PREFIX
@@ -1237,7 +1260,11 @@ static const char *const standard_startfile_prefix_1
   = STANDARD_STARTFILE_PREFIX_1;
 static const char *const standard_startfile_prefix_2
   = STANDARD_STARTFILE_PREFIX_2;
-
+static const char *const standard_startfile_prefix_3
+  = STANDARD_STARTFILE_PREFIX_3;
+static const char *const standard_startfile_prefix_4
+  = STANDARD_STARTFILE_PREFIX_4;
+  
 /* A relative path to be used in finding the location of tools
    relative to the driver.  */
 static const char *const tooldir_base_prefix = TOOLDIR_BASE_PREFIX;
@@ -1315,6 +1342,10 @@ static struct spec_list static_specs[] =
   INIT_STATIC_SPEC ("multilib_reuse",		&multilib_reuse),
   INIT_STATIC_SPEC ("linker",			&linker_name_spec),
   INIT_STATIC_SPEC ("linker_plugin_file",	&linker_plugin_file_spec),
+  INIT_STATIC_SPEC ("func_reorder_linker_plugin_file",
+                    &func_reorder_linker_plugin_file_spec),
+  INIT_STATIC_SPEC ("func_reorder_linker_plugin_opt",
+                    &func_reorder_linker_plugin_opt),
   INIT_STATIC_SPEC ("lto_wrapper",		&lto_wrapper_spec),
   INIT_STATIC_SPEC ("lto_gcc",			&lto_gcc_spec),
   INIT_STATIC_SPEC ("link_libgcc",		&link_libgcc_spec),
@@ -3111,10 +3142,11 @@ display_help (void)
   fputs (_("  -Xassembler <arg>        Pass <arg> on to the assembler\n"), stdout);
   fputs (_("  -Xpreprocessor <arg>     Pass <arg> on to the preprocessor\n"), stdout);
   fputs (_("  -Xlinker <arg>           Pass <arg> on to the linker\n"), stdout);
+  fputs (_("  -Xclang-only=<arg>       Ignore <arg>\n"), stdout);
   fputs (_("  -save-temps              Do not delete intermediate files\n"), stdout);
   fputs (_("  -save-temps=<arg>        Do not delete intermediate files\n"), stdout);
   fputs (_("\
-  -no-canonical-prefixes   Do not canonicalize paths when building relative\n\
+  -[no-]canonical-prefixes Specify the path canonicalization for relative\n\
                            prefixes to other gcc components\n"), stdout);
   fputs (_("  -pipe                    Use pipes rather than intermediate files\n"), stdout);
   fputs (_("  -time                    Time the execution of each subprocess\n"), stdout);
@@ -3131,6 +3163,7 @@ display_help (void)
   fputs (_("  -c                       Compile and assemble, but do not link\n"), stdout);
   fputs (_("  -o <file>                Place the output into <file>\n"), stdout);
   fputs (_("  -pie                     Create a position independent executable\n"), stdout);
+  fputs (_("  -no-pie                  Create a position dependent executable\n"), stdout);
   fputs (_("  -shared                  Create a shared library\n"), stdout);
   fputs (_("\
   -x <language>            Specify the language of the following input files\n\
@@ -3548,6 +3581,7 @@ driver_handle_option (struct gcc_options *opts,
 		     decoded->orig_option_with_args_text);
       break;
 
+    case OPT_canonical_prefixes:
     case OPT_no_canonical_prefixes:
       /* Already handled as a special case, so ignored here.  */
       do_save = false;
@@ -3732,20 +3766,25 @@ process_command (unsigned int decoded_options_count,
 	}
     }
 
-  /* Handle any -no-canonical-prefixes flag early, to assign the function
+  /* Handle any -[no-]canonical-prefixes flags early, to assign the function
      that builds relative prefixes.  This function creates default search
      paths that are needed later in normal option handling.  */
 
   for (j = 1; j < decoded_options_count; j++)
     {
-      if (decoded_options[j].opt_index == OPT_no_canonical_prefixes)
-	{
-	  get_relative_prefix = make_relative_prefix_ignore_links;
-	  break;
-	}
+      if (decoded_options[j].opt_index == OPT_canonical_prefixes)
+	get_relative_prefix = make_relative_prefix;
+      else if (decoded_options[j].opt_index == OPT_no_canonical_prefixes)
+	get_relative_prefix = make_relative_prefix_ignore_links;
     }
   if (! get_relative_prefix)
-    get_relative_prefix = make_relative_prefix;
+    {
+#ifdef ENABLE_CANONICAL_PREFIXES
+      get_relative_prefix = make_relative_prefix;
+#else
+      get_relative_prefix = make_relative_prefix_ignore_links;
+#endif
+    }
 
   /* Set up the default search paths.  If there is no GCC_EXEC_PREFIX,
      see if we can create it from the pathname specified in
@@ -6316,6 +6355,51 @@ compare_files (char *cmpfile[])
   return ret;
 }
 
+/* Set func_reorder_linker_plugin_file_spec and func_reorder_linker_plugin_opt
+   here.  This is the linker plugin to do global function reordering and is
+   enabled with -freorder-functions=*. */
+
+static void
+set_func_reorder_linker_plugin_spec (void)
+{
+  int i;
+  const char *plugin_opt_none = "group=none";
+  const char *plugin_opt_callgraph = "group=callgraph";
+  
+  /* Find the linker plugin that does function ordering.  */
+  func_reorder_linker_plugin_file_spec = find_a_file (&exec_prefixes,
+					    FRPLUGINSONAME, R_OK, false);
+
+  if (!func_reorder_linker_plugin_file_spec)
+      fatal_error ("-freorder-functions=*, but "
+		   FRPLUGINSONAME " file not found");
+
+  func_reorder_linker_plugin_opt = plugin_opt_none;
+
+  /* Set linker plugin options here.  Option ordering is also checked here.
+     -fno-reorder-functions or -freorder-functions should disable any
+     previous -freorder-functions=*. */
+  for (i = 0; (int) i < n_switches; i++)
+    {
+      /* Check for match with "-freorder-functions=callgraph".  */
+      if (func_reorder_linker_plugin_opt != plugin_opt_callgraph
+	  && !strcmp (switches[i].part1, "freorder-functions=callgraph"))
+	{
+	  func_reorder_linker_plugin_opt = plugin_opt_callgraph;
+	  continue;
+	}
+      /* Set option to none if it matches -fno-reorder-functions
+	 or -freorder-functions  */
+      if (func_reorder_linker_plugin_opt != plugin_opt_none
+	  && (!strcmp (switches[i].part1, "fno-reorder-functions")
+	      || !strcmp (switches[i].part1, "freorder-functions")))
+	{
+	  func_reorder_linker_plugin_opt = plugin_opt_none;
+	  continue;
+	}
+    }
+}
+
 extern int main (int, char **);
 
 int
@@ -6592,6 +6676,11 @@ main (int argc, char **argv)
 			      machine_suffix,
 			      standard_startfile_prefix, NULL),
 		      NULL, PREFIX_PRIORITY_LAST, 0, 1);
+	  add_prefix (&startfile_prefixes,
+		      concat (standard_exec_prefix,
+			      machine_suffix,
+			      standard_startfile_prefix, NULL),
+		      NULL, PREFIX_PRIORITY_LAST, 0, 1);
 	}
 
       /* Sysrooted prefixes are relocated because target_system_root is
@@ -6857,7 +6946,7 @@ main (int argc, char **argv)
     {
       printf (_("%s %s%s\n"), progname, pkgversion_string,
 	      version_string);
-      printf ("Copyright %s 2015 Free Software Foundation, Inc.\n",
+      printf ("Copyright %s 2014 Free Software Foundation, Inc.\n",
 	      _("(C)"));
       fputs (_("This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"),
@@ -7122,6 +7211,8 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
 #endif
 #endif
 
+          const char *freorder_functions_ = "freorder-functions=";
+
 	  /* We'll use ld if we can't find collect2.  */
 	  if (! strcmp (linker_name_spec, "collect2"))
 	    {
@@ -7151,6 +7242,12 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
 	    }
 #endif
 	  lto_gcc_spec = argv[0];
+
+	  /* The function reordering linker plugin will be loaded if the option
+	     -freorder-functions= is present in the command-line.  */ 
+	  if (switch_matches (freorder_functions_,
+		freorder_functions_ + strlen (freorder_functions_), 1))
+	    set_func_reorder_linker_plugin_spec ();
 	}
 
       /* Rebuild the COMPILER_PATH and LIBRARY_PATH environment variables
@@ -8172,9 +8269,7 @@ sanitize_spec_function (int argc, const char **argv)
     return NULL;
 
   if (strcmp (argv[0], "address") == 0)
-    return (flag_sanitize & SANITIZE_USER_ADDRESS) ? "" : NULL;
-  if (strcmp (argv[0], "kernel-address") == 0)
-    return (flag_sanitize & SANITIZE_KERNEL_ADDRESS) ? "" : NULL;
+    return (flag_sanitize & SANITIZE_ADDRESS) ? "" : NULL;
   if (strcmp (argv[0], "thread") == 0)
     return (flag_sanitize & SANITIZE_THREAD) ? "" : NULL;
   if (strcmp (argv[0], "undefined") == 0)

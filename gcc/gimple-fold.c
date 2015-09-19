@@ -105,7 +105,9 @@ can_refer_decl_in_current_unit_p (tree decl, tree from_decl)
      external var.  */
   if (!from_decl
       || TREE_CODE (from_decl) != VAR_DECL
-      || !DECL_EXTERNAL (from_decl)
+      || (!DECL_EXTERNAL (from_decl)
+         && (vnode = varpool_get_node (from_decl)) != NULL
+         && vnode->definition)
       || (flag_ltrans
 	  && symtab_get_node (from_decl)->in_other_partition))
     return true;
@@ -146,8 +148,7 @@ can_refer_decl_in_current_unit_p (tree decl, tree from_decl)
          The second is important when devirtualization happens during final
          compilation stage when making a new reference no longer makes callee
          to be compiled.  */
-      if (!node || !node->definition
-	  || DECL_EXTERNAL (decl) || node->global.inlined_to)
+      if (!node || !node->definition || node->global.inlined_to)
 	{
 	  gcc_checking_assert (!TREE_ASM_WRITTEN (decl));
 	  return false;

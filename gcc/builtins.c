@@ -59,6 +59,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "builtins.h"
 #include "ubsan.h"
 #include "cilk.h"
+#include "input.h"
 
 
 static tree do_mpc_arg1 (tree, tree, int (*)(mpc_ptr, mpc_srcptr, mpc_rnd_t));
@@ -369,24 +370,19 @@ get_object_alignment_2 (tree exp, unsigned int *alignp,
       tree addr = TREE_OPERAND (exp, 0);
       unsigned ptr_align;
       unsigned HOST_WIDE_INT ptr_bitpos;
-      unsigned HOST_WIDE_INT ptr_bitmask = ~0;
 
-      /* If the address is explicitely aligned, handle that.  */
       if (TREE_CODE (addr) == BIT_AND_EXPR
 	  && TREE_CODE (TREE_OPERAND (addr, 1)) == INTEGER_CST)
 	{
-	  ptr_bitmask = TREE_INT_CST_LOW (TREE_OPERAND (addr, 1));
-	  ptr_bitmask *= BITS_PER_UNIT;
-	  align = ptr_bitmask & -ptr_bitmask;
+	  align = (TREE_INT_CST_LOW (TREE_OPERAND (addr, 1))
+		    & -TREE_INT_CST_LOW (TREE_OPERAND (addr, 1)));
+	  align *= BITS_PER_UNIT;
 	  addr = TREE_OPERAND (addr, 0);
 	}
 
       known_alignment
 	= get_pointer_alignment_1 (addr, &ptr_align, &ptr_bitpos);
       align = MAX (ptr_align, align);
-
-      /* Re-apply explicit alignment to the bitpos.  */
-      ptr_bitpos &= ptr_bitmask;
 
       /* The alignment of the pointer operand in a TARGET_MEM_REF
 	 has to take the variable offset parts into account.  */
@@ -12069,13 +12065,16 @@ fold_builtin_next_arg (tree exp, bool va_start_p)
   tree fntype = TREE_TYPE (current_function_decl);
   int nargs = call_expr_nargs (exp);
   tree arg;
+  location_t loc = LOCATION_LOCUS (input_location);
+  if (has_discriminator (loc))
+    loc = map_discriminator_location (loc);
+
   /* There is good chance the current input_location points inside the
      definition of the va_start macro (perhaps on the token for
      builtin) in a system header, so warnings will not be emitted.
      Use the location in real source code.  */
   source_location current_location =
-    linemap_unwind_to_first_non_reserved_loc (line_table, input_location,
-					      NULL);
+    linemap_unwind_to_first_non_reserved_loc (line_table, loc, NULL);
 
   if (!stdarg_p (fntype))
     {

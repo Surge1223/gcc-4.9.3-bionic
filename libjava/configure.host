@@ -106,6 +106,15 @@ case "${host}" in
 	# Work around a strange libtool feature that causes libraries
 	# to be linked with libgcc_s but not libgcc.  
 	LDFLAGS="${LDFLAGS} -Wl,-lgcc"
+  arm*-linux-*)
+	libgcj_interpreter=yes
+	sysdeps_dir=arm
+	fallback_backtrace_h=sysdep/arm/backtrace.h
+	libgcj_cxxflags=-Wno-abi
+	ATOMICSPEC=-fuse-atomic-builtins
+	# Work around a strange libtool feature that causes libraries
+	# to be linked with libgcc_s but not libgcc.  
+	LDFLAGS="${LDFLAGS} -Wl,-lgcc"	
 	;;
   mips-tx39-*|mipstx39-unknown-*)
 	libgcj_flags="${libgcj_flags} -G 0"
@@ -301,6 +310,12 @@ EOF
 	DIVIDESPEC=-fuse-divide-subroutine
 	;;
   arm*-linux* )
+	slow_pthread_self=no
+	can_unwind_signal=no
+	CHECKREFSPEC=-fcheck-references
+	DIVIDESPEC=-fuse-divide-subroutine
+	;;
+  arm*-linux-* )
 	slow_pthread_self=no
 	can_unwind_signal=no
 	CHECKREFSPEC=-fcheck-references

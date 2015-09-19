@@ -99,17 +99,10 @@ static GTY(()) vec<tree, va_gc> *pending_statics;
    may need to emit outline anyway.  */
 static GTY(()) vec<tree, va_gc> *deferred_fns;
 
-/* A list of functions which we might want to set DECL_COMDAT on at EOF.  */
-
-static GTY(()) vec<tree, va_gc> *maybe_comdat_fns;
-
 /* A list of decls that use types with no linkage, which we need to make
    sure are defined.  */
 static GTY(()) vec<tree, va_gc> *no_linkage_decls;
 
-/* Nonzero if we're done parsing and into end-of-file activities.  */
-
-int at_eof;
 
 
 /* Return a member function type (a METHOD_TYPE), given FNTYPE (a
@@ -1396,8 +1389,7 @@ cplus_decl_attributes (tree *decl, tree attributes, int flags)
 
   /* Add implicit "omp declare target" attribute if requested.  */
   if (scope_chain->omp_declare_target_attribute
-      && ((TREE_CODE (*decl) == VAR_DECL
-	   && (TREE_STATIC (*decl) || DECL_EXTERNAL (*decl)))
+      && ((TREE_CODE (*decl) == VAR_DECL && TREE_STATIC (*decl))
 	  || TREE_CODE (*decl) == FUNCTION_DECL))
     {
       if (TREE_CODE (*decl) == VAR_DECL
@@ -1902,11 +1894,6 @@ mark_needed (tree decl)
       struct cgraph_node *node = cgraph_get_create_node (decl);
       node->forced_by_abi = true;
 
-      /* #pragma interface and -frepo code can call mark_needed for
-          maybe-in-charge 'tors; mark the clones as well.  */
-      tree clone;
-      FOR_EACH_CLONE (clone, decl)
-	mark_needed (clone);
     }
   else if (TREE_CODE (decl) == VAR_DECL)
     {
@@ -1944,6 +1931,11 @@ decl_needed_p (tree decl)
      visible to other DLLs.  */
   if (flag_keep_inline_dllexport
       && lookup_attribute ("dllexport", DECL_ATTRIBUTES (decl)))
+    return true;
+  /* Virtual functions might be needed for devirtualization.  */
+  if (flag_devirtualize
+      && TREE_CODE (decl) == FUNCTION_DECL
+      && DECL_VIRTUAL_P (decl))
     return true;
   /* Otherwise, DECL does not need to be emitted -- yet.  A subsequent
      reference to DECL might cause it to be emitted later.  */
@@ -2123,12 +2115,9 @@ constrain_visibility_for_template (tree decl, tree targs)
       tree arg = TREE_VEC_ELT (args, i-1);
       if (TYPE_P (arg))
 	vis = type_visibility (arg);
-      else
+      else if (TREE_TYPE (arg) && POINTER_TYPE_P (TREE_TYPE (arg)))
 	{
-	  if (REFERENCE_REF_P (arg))
-	    arg = TREE_OPERAND (arg, 0);
-	  if (TREE_TYPE (arg))
-	    STRIP_NOPS (arg);
+	  STRIP_NOPS (arg);
 	  if (TREE_CODE (arg) == ADDR_EXPR)
 	    arg = TREE_OPERAND (arg, 0);
 	  if (VAR_OR_FUNCTION_DECL_P (arg))
@@ -2692,7 +2681,17 @@ import_export_decl (tree decl)
     {
       /* The repository indicates that this entity should be defined
 	 here.  Make sure the back end honors that request.  */
-      mark_needed (decl);
+      if (VAR_P (decl))
+	mark_needed (decl);
+      else if (DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P (decl)
+	       || DECL_MAYBE_IN_CHARGE_DESTRUCTOR_P (decl))
+	{
+	  tree clone;
+	  FOR_EACH_CLONE (clone, decl)
+	    mark_needed (clone);
+	}
+      else
+	mark_needed (decl);
       /* Output the definition as an ordinary strong definition.  */
       DECL_EXTERNAL (decl) = 0;
       DECL_INTERFACE_KNOWN (decl) = 1;
@@ -3337,11 +3336,13 @@ start_static_storage_duration_function (unsigned count)
 {
   tree type;
   tree body;
-  char id[sizeof (SSDF_IDENTIFIER) + 1 /* '\0' */ + 32];
+  char id[sizeof (SSDF_IDENTIFIER) + 1 /* '\0' */ + 64];
 
   /* Create the identifier for this function.  It will be of the form
      SSDF_IDENTIFIER_<number>.  */
   sprintf (id, "%s_%u", SSDF_IDENTIFIER, count);
+  if (L_IPO_IS_AUXILIARY_MODULE)
+    sprintf (id, "%s.cmo.%u", id, current_module_id);
 
   type = build_function_type_list (void_type_node,
 				   integer_type_node, integer_type_node,
@@ -3776,6 +3777,8 @@ prune_vars_needing_no_initialization (tree *vars)
 	  continue;
 	}
 
+      gcc_assert (!L_IPO_IS_AUXILIARY_MODULE
+                  || varpool_is_auxiliary (varpool_node_for_decl (decl)));
       /* This variable is going to need initialization and/or
 	 finalization, so we add it to the list.  */
       *var = TREE_CHAIN (t);
@@ -4141,6 +4144,22 @@ no_linkage_error (tree decl)
 	       "to declare function %q#D with linkage", t, decl);
 }
 
+/* Clear the list of deferred functions.  */
+
+void
+cp_clear_deferred_fns (void)
+{
+  vec_free (deferred_fns);
+  deferred_fns = NULL;
+  keyed_classes = NULL;
+  vec_free (no_linkage_decls);
+  no_linkage_decls = NULL;
+  cp_clear_constexpr_hashtable ();
+  clear_pending_templates ();
+  reset_anon_name ();
+  reset_temp_count ();
+}
+
 /* Collect declarations from all namespaces relevant to SOURCE_FILE.  */
 
 static void
@@ -4235,102 +4254,22 @@ dump_tu (void)
     }
 }
 
-/* Much like the above, but not necessarily defined.  4.9 hack for setting
-   DECL_COMDAT on DECL_EXTERNAL functions, along with set_comdat.  */
-
-void
-note_comdat_fn (tree decl)
-{
-  vec_safe_push (maybe_comdat_fns, decl);
-}
-
-/* DECL is a function with vague linkage that was not
-   instantiated/synthesized in this translation unit.  Set DECL_COMDAT for
-   the benefit of can_refer_decl_in_current_unit_p.  */
-
-static void
-set_comdat (tree decl)
-{
-  DECL_COMDAT (decl) = true;
-
-  tree clone;
-  FOR_EACH_CLONE (clone, decl)
-    set_comdat (clone);
-
-  if (DECL_VIRTUAL_P (decl))
-    for (tree thunk = DECL_THUNKS (decl); thunk;
-	 thunk = DECL_CHAIN (thunk))
-      DECL_COMDAT (thunk) = true;
-}
-
 /* This routine is called at the end of compilation.
    Its job is to create all the code needed to initialize and
    destroy the global aggregates.  We do the destruction
    first, since that way we only need to reverse the decls once.  */
 
 void
-cp_write_global_declarations (void)
+cp_process_pending_declarations (location_t locus)
 {
-  tree vars;
+  tree vars, decl;
   bool reconsider;
   size_t i;
-  location_t locus;
   unsigned ssdf_count = 0;
   int retries = 0;
-  tree decl;
-  struct pointer_set_t *candidates;
 
-  locus = input_location;
-  at_eof = 1;
-
-  /* Bad parse errors.  Just forget about it.  */
-  if (! global_bindings_p () || current_class_type
-      || !vec_safe_is_empty (decl_namespace_list))
-    return;
-
-  /* This is the point to write out a PCH if we're doing that.
-     In that case we do not want to do anything else.  */
-  if (pch_file)
-    {
-      c_common_write_pch ();
-      dump_tu ();
-      return;
-    }
-
-  cgraph_process_same_body_aliases ();
-
-  /* Handle -fdump-ada-spec[-slim] */
-  if (flag_dump_ada_spec || flag_dump_ada_spec_slim)
-    {
-      if (flag_dump_ada_spec_slim)
-	collect_source_ref (main_input_filename);
-      else
-	collect_source_refs (global_namespace);
-
-      dump_ada_specs (collect_all_refs, cpp_check);
-    }
-
-  /* FIXME - huh?  was  input_line -= 1;*/
 
   timevar_start (TV_PHASE_DEFERRED);
-
-  /* We now have to write out all the stuff we put off writing out.
-     These include:
-
-       o Template specializations that we have not yet instantiated,
-	 but which are needed.
-       o Initialization and destruction for non-local objects with
-	 static storage duration.  (Local objects with static storage
-	 duration are initialized when their scope is first entered,
-	 and are cleaned up via atexit.)
-       o Virtual function tables.
-
-     All of these may cause others to be needed.  For example,
-     instantiating one function may cause another to be needed, and
-     generating the initializer for an object may cause templates to be
-     instantiated, etc., etc.  */
-
-  emit_support_tinfos ();
 
   do
     {
@@ -4567,6 +4506,25 @@ cp_write_global_declarations (void)
     }
   while (reconsider);
 
+  if (L_IPO_IS_AUXILIARY_MODULE)
+    {
+      tree fndecl;
+      int i;
+
+      gcc_assert (flag_dyn_ipa && L_IPO_COMP_MODE);
+
+      /* Do some cleanup -- we do not really need static init function
+         to be created for auxiliary modules -- they are created to keep
+         funcdef_no consistent between profile use and profile gen.  */
+      FOR_EACH_VEC_SAFE_ELT (ssdf_decls, i, fndecl)
+        /* Such ssdf_decls are not called from GLOBAL ctor/dtor, mark
+	   them reachable to avoid being eliminated too early before
+	   gimplication.  */
+        cgraph_enqueue_node (cgraph_get_create_node (fndecl));
+      ssdf_decls = NULL;
+      timevar_stop (TV_PHASE_DEFERRED);
+      return;
+    }
   /* All used inline functions must have a definition at this point.  */
   FOR_EACH_VEC_SAFE_ELT (deferred_fns, i, decl)
     {
@@ -4618,7 +4576,10 @@ cp_write_global_declarations (void)
 
   /* We're done with the splay-tree now.  */
   if (priority_info_map)
-    splay_tree_delete (priority_info_map);
+    {
+      splay_tree_delete (priority_info_map);
+      priority_info_map = NULL;
+    }
 
   /* Generate any missing aliases.  */
   maybe_apply_pending_pragma_weaks ();
@@ -4626,11 +4587,76 @@ cp_write_global_declarations (void)
   /* We're done with static constructors, so we can go back to "C++"
      linkage now.  */
   pop_lang_context ();
+  ssdf_decls = NULL;
+  timevar_stop (TV_PHASE_DEFERRED);
+}
+
+/* This routine is called at the end of compilation.
+   Its job is to create all the code needed to initialize and
+   destroy the global aggregates.  We do the destruction
+   first, since that way we only need to reverse the decls once.  */
+
+void
+cp_write_global_declarations (void)
+{
+  bool reconsider = false;
+  location_t locus;
+  struct pointer_set_t *candidates;
+
+  locus = input_location;
+  at_eof = 1;
+
+  /* Bad parse errors.  Just forget about it.  */
+  if (! global_bindings_p () || current_class_type
+      || !vec_safe_is_empty (decl_namespace_list))
+    return;
+
+  if (pch_file)
+    {
+      c_common_write_pch ();
+      return;
+    }
+
+  cgraph_process_same_body_aliases ();
+
+  /* Handle -fdump-ada-spec[-slim] */
+  if (flag_dump_ada_spec || flag_dump_ada_spec_slim)
+    {
+      if (flag_dump_ada_spec_slim)
+	collect_source_ref (main_input_filename);
+      else
+	collect_source_refs (global_namespace);
+
+      dump_ada_specs (collect_all_refs, cpp_check);
+    }
+
+  /* FIXME - huh?  was  input_line -= 1;*/
+
+  /* We now have to write out all the stuff we put off writing out.
+     These include:
+
+       o Template specializations that we have not yet instantiated,
+	 but which are needed.
+       o Initialization and destruction for non-local objects with
+	 static storage duration.  (Local objects with static storage
+	 duration are initialized when their scope is first entered,
+	 and are cleaned up via atexit.)
+       o Virtual function tables.
+
+     All of these may cause others to be needed.  For example,
+     instantiating one function may cause another to be needed, and
+     generating the initializer for an object may cause templates to be
+     instantiated, etc., etc.  */
+
+  emit_support_tinfos ();
+
+  if (!L_IPO_COMP_MODE)
+    cp_process_pending_declarations (locus);
 
   /* Collect candidates for Java hidden aliases.  */
   candidates = collect_candidates_for_java_method_aliases ();
 
-  timevar_stop (TV_PHASE_DEFERRED);
+
   timevar_start (TV_PHASE_OPT_GEN);
 
   if (flag_vtable_verify)
@@ -4640,9 +4666,6 @@ cp_write_global_declarations (void)
       vtv_build_vtable_verify_fndecl ();
     }
 
-  FOR_EACH_VEC_SAFE_ELT (maybe_comdat_fns, i, decl)
-    if (!DECL_COMDAT (decl) && vague_linkage_p (decl))
-      set_comdat (decl);
 
   finalize_compilation_unit ();
 
@@ -4918,7 +4941,7 @@ mark_used (tree decl, tsubst_flags_t complain)
       --function_depth;
     }
 
-  if (processing_template_decl || in_template_function ())
+  if (processing_template_decl)
     return true;
 
   /* Check this too in case we're within fold_non_dependent_expr.  */

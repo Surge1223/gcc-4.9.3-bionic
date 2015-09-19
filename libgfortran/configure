@@ -11858,7 +11858,7 @@ sysv5* | sco3.2v5* | sco5v6* | unixware* | OpenUNIX* | sysv4*uw2*)
   shlibpath_overrides_runpath=yes
   hardcode_into_libs=yes
   if test "$with_gnu_ld" = yes; then
-    sys_lib_search_path_spec='/usr/local/lib /usr/gnu/lib /usr/ccs/lib /usr/lib /lib'
+    sys_lib_search_path_spec='/data/toolchain/lib /usr/gnu/lib /usr/ccs/lib /usr/lib /lib'
   else
     sys_lib_search_path_spec='/usr/ccs/lib /usr/lib'
     case $host_os in
@@ -15471,8 +15471,8 @@ sysv4*MP*)
   fi
   ;;
 
-sysv5* | sco3.2v5* | sco5v6* | unixware* | OpenUNIX* | sysv4*uw2*)
-  version_type=freebsd-elf
+  arm*-*-linux-androideabi | sco3.2v5* | sco5v6* | unixware* | OpenUNIX* | sysv4*uw2*)
+  version_type=elf
   need_lib_prefix=no
   need_version=no
   library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext} $libname${shared_ext}'
@@ -15654,11 +15654,6 @@ _ACEOF
 if ac_fn_fc_try_compile "$LINENO"; then :
   { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-     as_fn_error "GNU Fortran is not working; please report a bug in http://gcc.gnu.org/bugzilla, attaching $PWD/config.log" "$LINENO" 5
-
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 ac_ext=c

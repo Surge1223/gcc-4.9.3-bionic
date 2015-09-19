@@ -144,10 +144,6 @@ static basic_block curr_bb;
 static lra_insn_recog_data_t curr_id;
 static struct lra_static_insn_data *curr_static_id;
 static enum machine_mode curr_operand_mode[MAX_RECOG_OPERANDS];
-/* Mode of the register substituted by its equivalence with VOIDmode
-   (e.g. constant) and whose subreg is given operand of the current
-   insn.  VOIDmode in all other cases.  */
-static machine_mode original_subreg_reg_mode[MAX_RECOG_OPERANDS];
 
 
 
@@ -320,6 +316,118 @@ in_mem_p (int regno)
 {
   return get_reg_class (regno) == NO_REGS;
 }
+
+/* Return 1 if ADDR is a valid memory address for mode MODE in address
+   space AS, and check that each pseudo has the proper kind of hard
+   reg.	 */
+static int
+valid_address_p (enum machine_mode mode ATTRIBUTE_UNUSED,
+		 rtx addr, addr_space_t as)
+{
+#ifdef GO_IF_LEGITIMATE_ADDRESS
+  lra_assert (ADDR_SPACE_GENERIC_P (as));
+  GO_IF_LEGITIMATE_ADDRESS (mode, addr, win);
+  return 0;
+
+ win:
+  return 1;
+#else
+  return targetm.addr_space.legitimate_address_p (mode, addr, 0, as);
+#endif
+}
+
+namespace {
+  /* Temporarily eliminates registers in an address (for the lifetime of
+     the object).  */
+  class address_eliminator {
+  public:
+    address_eliminator (struct address_info *ad);
+    ~address_eliminator ();
+
+  private:
+    struct address_info *m_ad;
+    rtx *m_base_loc;
+    rtx m_base_reg;
+    rtx *m_index_loc;
+    rtx m_index_reg;
+  };
+}
+
+address_eliminator::address_eliminator (struct address_info *ad)
+  : m_ad (ad),
+    m_base_loc (strip_subreg (ad->base_term)),
+    m_base_reg (NULL_RTX),
+    m_index_loc (strip_subreg (ad->index_term)),
+    m_index_reg (NULL_RTX)
+{
+  if (m_base_loc != NULL)
+    {
+      m_base_reg = *m_base_loc;
+      lra_eliminate_reg_if_possible (m_base_loc);
+      if (m_ad->base_term2 != NULL)
+	*m_ad->base_term2 = *m_ad->base_term;
+    }
+  if (m_index_loc != NULL)
+    {
+      m_index_reg = *m_index_loc;
+      lra_eliminate_reg_if_possible (m_index_loc);
+    }
+}
+
+address_eliminator::~address_eliminator ()
+{
+  if (m_base_loc && *m_base_loc != m_base_reg)
+    {
+      *m_base_loc = m_base_reg;
+      if (m_ad->base_term2 != NULL)
+	*m_ad->base_term2 = *m_ad->base_term;
+    }
+  if (m_index_loc && *m_index_loc != m_index_reg)
+    *m_index_loc = m_index_reg;
+}
+
+/* Return true if the eliminated form of AD is a legitimate target address.  */
+static bool
+valid_address_p (struct address_info *ad)
+{
+  address_eliminator eliminator (ad);
+  return valid_address_p (ad->mode, *ad->outer, ad->as);
+}
+
+#ifdef EXTRA_CONSTRAINT_STR
+/* Return true if the eliminated form of memory reference OP satisfies
+   extra memory constraint CONSTRAINT.  */
+static bool
+satisfies_memory_constraint_p (rtx op, const char *constraint)
+{
+  struct address_info ad;
+
+  decompose_mem_address (&ad, op);
+  address_eliminator eliminator (&ad);
+  return EXTRA_CONSTRAINT_STR (op, *constraint, constraint);
+}
+
+/* Return true if the eliminated form of address AD satisfies extra
+   address constraint CONSTRAINT.  */
+static bool
+satisfies_address_constraint_p (struct address_info *ad,
+				const char *constraint)
+{
+  address_eliminator eliminator (ad);
+  return EXTRA_CONSTRAINT_STR (*ad->outer, *constraint, constraint);
+}
+
+/* Return true if the eliminated form of address OP satisfies extra
+   address constraint CONSTRAINT.  */
+static bool
+satisfies_address_constraint_p (rtx op, const char *constraint)
+{
+  struct address_info ad;
+
+  decompose_lea_address (&ad, &op);
+  return satisfies_address_constraint_p (&ad, constraint);
+}
+#endif
 
 /* Initiate equivalences for LRA.  As we keep original equivalences
    before any elimination, we need to make copies otherwise any change
@@ -1239,13 +1347,13 @@ static int valid_address_p (enum machine_mode mode, rtx addr, addr_space_t as);
 
 /* Make reloads for subreg in operand NOP with internal subreg mode
    REG_MODE, add new reloads for further processing.  Return true if
-   any change was done.  */
+   any reload was generated.  */
 static bool
 simplify_operand_subreg (int nop, enum machine_mode reg_mode)
 {
   int hard_regno;
   rtx before, after;
-  enum machine_mode mode, innermode;
+  enum machine_mode mode;
   rtx reg, new_reg;
   rtx operand = *curr_id->operand_loc[nop];
   enum reg_class regclass;
@@ -1258,7 +1366,6 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
 
   mode = GET_MODE (operand);
   reg = SUBREG_REG (operand);
-  innermode = GET_MODE (reg);
   type = curr_static_id->operand[nop].type;
   /* If we change address for paradoxical subreg of memory, the
      address might violate the necessary alignment or the access might
@@ -1277,7 +1384,7 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
       alter_subreg (curr_id->operand_loc[nop], false);
       subst = *curr_id->operand_loc[nop];
       lra_assert (MEM_P (subst));
-      if (! valid_address_p (innermode, XEXP (reg, 0),
+      if (! valid_address_p (GET_MODE (reg), XEXP (reg, 0),
 			     MEM_ADDR_SPACE (reg))
 	  || valid_address_p (GET_MODE (subst), XEXP (subst, 0),
 			      MEM_ADDR_SPACE (subst)))
@@ -1291,20 +1398,6 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
     {
       alter_subreg (curr_id->operand_loc[nop], false);
       return true;
-    }
-  else if (CONSTANT_P (reg))
-    {
-      /* Try to simplify subreg of constant.  It is usually result of
-	 equivalence substitution.  */
-      if (innermode == VOIDmode
-	  && (innermode = original_subreg_reg_mode[nop]) == VOIDmode)
-	innermode = curr_static_id->operand[nop].mode;
-      if ((new_reg = simplify_subreg (mode, reg, innermode,
-				      SUBREG_BYTE (operand))) != NULL_RTX)
-	{
-	  *curr_id->operand_loc[nop] = new_reg;
-	  return true;
-	}
     }
   /* Put constant into memory when we have mixed modes.  It generates
      a better code in most cases as it does not need a secondary
@@ -1325,9 +1418,9 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
        && (hard_regno = lra_get_regno_hard_regno (REGNO (reg))) >= 0
        /* Don't reload paradoxical subregs because we could be looping
 	  having repeatedly final regno out of hard regs range.  */
-       && (hard_regno_nregs[hard_regno][innermode]
+       && (hard_regno_nregs[hard_regno][GET_MODE (reg)]
 	   >= hard_regno_nregs[hard_regno][mode])
-       && simplify_subreg_regno (hard_regno, innermode,
+       && simplify_subreg_regno (hard_regno, GET_MODE (reg),
 				 SUBREG_BYTE (operand), mode) < 0
        /* Don't reload subreg for matching reload.  It is actually
 	  valid subreg in LRA.  */
@@ -1353,7 +1446,7 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
 	  bitmap_set_bit (&lra_subreg_reload_pseudos, REGNO (new_reg));
 
 	  insert_before = (type != OP_OUT
-			   || GET_MODE_SIZE (innermode) > GET_MODE_SIZE (mode));
+			   || GET_MODE_SIZE (GET_MODE (reg)) > GET_MODE_SIZE (mode));
 	  insert_after = (type != OP_IN);
 	  insert_move_for_subreg (insert_before ? &before : NULL,
 				  insert_after ? &after : NULL,
@@ -1396,7 +1489,7 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
   else if (REG_P (reg)
 	   && REGNO (reg) >= FIRST_PSEUDO_REGISTER
 	   && (hard_regno = lra_get_regno_hard_regno (REGNO (reg))) >= 0
-	   && (hard_regno_nregs[hard_regno][innermode]
+	   && (hard_regno_nregs[hard_regno][GET_MODE (reg)]
 	       < hard_regno_nregs[hard_regno][mode])
 	   && (regclass = lra_get_allocno_class (REGNO (reg)))
 	   && (type != OP_IN
@@ -1414,7 +1507,7 @@ simplify_operand_subreg (int nop, enum machine_mode reg_mode)
 	  bool insert_before, insert_after;
 
 	  PUT_MODE (new_reg, mode);
-          subreg = simplify_gen_subreg (innermode, new_reg, mode, 0);
+          subreg = simplify_gen_subreg (GET_MODE (reg), new_reg, mode, 0);
 	  bitmap_set_bit (&lra_subreg_reload_pseudos, REGNO (new_reg));
 
 	  insert_before = (type != OP_OUT);
@@ -1978,7 +2071,8 @@ process_alt_operands (int only_alternative)
 #ifdef EXTRA_CONSTRAINT_STR
 		      if (EXTRA_MEMORY_CONSTRAINT (c, p))
 			{
-			  if (EXTRA_CONSTRAINT_STR (op, c, p))
+			  if (MEM_P (op)
+			      && satisfies_memory_constraint_p (op, p))
 			    win = true;
 			  else if (spilled_pseudo_p (op))
 			    win = true;
@@ -1997,7 +2091,7 @@ process_alt_operands (int only_alternative)
 			}
 		      if (EXTRA_ADDRESS_CONSTRAINT (c, p))
 			{
-			  if (EXTRA_CONSTRAINT_STR (op, c, p))
+			  if (satisfies_address_constraint_p (op, p))
 			    win = true;
 
 			  /* If we didn't already win, we can reload
@@ -2613,58 +2707,37 @@ process_alt_operands (int only_alternative)
   return ok_p;
 }
 
-/* Return 1 if ADDR is a valid memory address for mode MODE in address
-   space AS, and check that each pseudo has the proper kind of hard
-   reg.	 */
-static int
-valid_address_p (enum machine_mode mode ATTRIBUTE_UNUSED,
-		 rtx addr, addr_space_t as)
+/* Make reload base reg from address AD.  */
+static rtx
+base_to_reg (struct address_info *ad)
 {
-#ifdef GO_IF_LEGITIMATE_ADDRESS
-  lra_assert (ADDR_SPACE_GENERIC_P (as));
-  GO_IF_LEGITIMATE_ADDRESS (mode, addr, win);
-  return 0;
+  enum reg_class cl;
+  int code = -1;
+  rtx new_inner = NULL_RTX;
+  rtx new_reg = NULL_RTX;
+  rtx insn;
+  rtx last_insn = get_last_insn();
 
- win:
-  return 1;
-#else
-  return targetm.addr_space.legitimate_address_p (mode, addr, 0, as);
-#endif
-}
+  lra_assert (ad->base == ad->base_term && ad->disp == ad->disp_term);
+  cl = base_reg_class (ad->mode, ad->as, ad->base_outer_code,
+                       get_index_code (ad));
+  new_reg = lra_create_new_reg (GET_MODE (*ad->base_term), NULL_RTX,
+                                cl, "base");
+  new_inner = simplify_gen_binary (PLUS, GET_MODE (new_reg), new_reg,
+                                   ad->disp_term == NULL
+                                   ? gen_int_mode (0, ad->mode)
+                                   : *ad->disp_term);
+  if (!valid_address_p (ad->mode, new_inner, ad->as))
+    return NULL_RTX;
+  insn = emit_insn (gen_rtx_SET (ad->mode, new_reg, *ad->base_term));
+  code = recog_memoized (insn);
+  if (code < 0)
+    {
+      delete_insns_since (last_insn);
+      return NULL_RTX;
+    }
 
-/* Return whether address AD is valid.  */
-
-static bool
-valid_address_p (struct address_info *ad)
-{
-  /* Some ports do not check displacements for eliminable registers,
-     so we replace them temporarily with the elimination target.  */
-  rtx saved_base_reg = NULL_RTX;
-  rtx saved_index_reg = NULL_RTX;
-  rtx *base_term = strip_subreg (ad->base_term);
-  rtx *index_term = strip_subreg (ad->index_term);
-  if (base_term != NULL)
-    {
-      saved_base_reg = *base_term;
-      lra_eliminate_reg_if_possible (base_term);
-      if (ad->base_term2 != NULL)
-	*ad->base_term2 = *ad->base_term;
-    }
-  if (index_term != NULL)
-    {
-      saved_index_reg = *index_term;
-      lra_eliminate_reg_if_possible (index_term);
-    }
-  bool ok_p = valid_address_p (ad->mode, *ad->outer, ad->as);
-  if (saved_base_reg != NULL_RTX)
-    {
-      *base_term = saved_base_reg;
-      if (ad->base_term2 != NULL)
-	*ad->base_term2 = *ad->base_term;
-    }
-  if (saved_index_reg != NULL_RTX)
-    *index_term = saved_index_reg;
-  return ok_p;
+  return new_inner;
 }
 
 /* Make reload base reg + disp from address AD.  Return the new pseudo.  */
@@ -2874,7 +2947,7 @@ process_address_1 (int nop, rtx *before, rtx *after)
      EXTRA_CONSTRAINT_STR for the validation.  */
   if (constraint[0] != 'p'
       && EXTRA_ADDRESS_CONSTRAINT (constraint[0], constraint)
-      && EXTRA_CONSTRAINT_STR (op, constraint[0], constraint))
+      && satisfies_address_constraint_p (&ad, constraint))
     return change_p;
 #endif
 
@@ -2888,6 +2961,8 @@ process_address_1 (int nop, rtx *before, rtx *after)
      force_const_to_mem.
 
      3) the address is a frame address with an invalid offset.
+
+     4) the address is a frame address with an invalid base.
 
      All these cases involve a non-autoinc address, so there is no
      point revalidating other types.  */
@@ -2970,14 +3045,19 @@ process_address_1 (int nop, rtx *before, rtx *after)
       int regno;
       enum reg_class cl;
       rtx set, insns, last_insn;
+      /* Try to reload base into register only if the base is invalid
+         for the address but with valid offset, case (4) above.  */
+      start_sequence ();
+      new_reg = base_to_reg (&ad);
+
       /* base + disp => new base, cases (1) and (3) above.  */
       /* Another option would be to reload the displacement into an
 	 index register.  However, postreload has code to optimize
 	 address reloads that have the same base and different
 	 displacements, so reloading into an index register would
 	 not necessarily be a win.  */
-      start_sequence ();
-      new_reg = base_plus_disp_to_reg (&ad);
+      if (new_reg == NULL_RTX)
+        new_reg = base_plus_disp_to_reg (&ad);
       insns = get_insns ();
       last_insn = get_last_insn ();
       /* If we generated at least two insns, try last insn source as
@@ -3203,9 +3283,6 @@ swap_operands (int nop)
   enum machine_mode mode = curr_operand_mode[nop];
   curr_operand_mode[nop] = curr_operand_mode[nop + 1];
   curr_operand_mode[nop + 1] = mode;
-  mode = original_subreg_reg_mode[nop];
-  original_subreg_reg_mode[nop] = original_subreg_reg_mode[nop + 1];
-  original_subreg_reg_mode[nop + 1] = mode;
   rtx x = *curr_id->operand_loc[nop];
   *curr_id->operand_loc[nop] = *curr_id->operand_loc[nop + 1];
   *curr_id->operand_loc[nop + 1] = x;
@@ -3302,19 +3379,14 @@ curr_insn_transform (void)
       if (GET_CODE (old) == SUBREG)
 	old = SUBREG_REG (old);
       subst = get_equiv_with_elimination (old, curr_insn);
-      original_subreg_reg_mode[i] = VOIDmode;
       if (subst != old)
 	{
 	  subst = copy_rtx (subst);
 	  lra_assert (REG_P (old));
-	  if (GET_CODE (op) != SUBREG)
-	    *curr_id->operand_loc[i] = subst;
+	  if (GET_CODE (op) == SUBREG)
+	    SUBREG_REG (op) = subst;
 	  else
-	    {
-	      SUBREG_REG (op) = subst;
-	      if (GET_MODE (subst) == VOIDmode)
-		original_subreg_reg_mode[i] = GET_MODE (old);
-	    }
+	    *curr_id->operand_loc[i] = subst;
 	  if (lra_dump_file != NULL)
 	    {
 	      fprintf (lra_dump_file,
@@ -3608,7 +3680,7 @@ curr_insn_transform (void)
 		  break;
 #ifdef EXTRA_CONSTRAINT_STR
 		if (EXTRA_MEMORY_CONSTRAINT (c, constraint)
-		    && EXTRA_CONSTRAINT_STR (tem, c, constraint))
+		    && satisfies_memory_constraint_p (tem, constraint))
 		  break;
 #endif
 	      }
@@ -3726,6 +3798,7 @@ curr_insn_transform (void)
 				  (ira_class_hard_regs[goal_alt[i]][0],
 				   GET_MODE (reg), byte, mode) >= 0)))))
 		{
+		  type = OP_INOUT;
 		  loc = &SUBREG_REG (*loc);
 		  mode = GET_MODE (*loc);
 		}
@@ -3947,6 +4020,10 @@ loc_equivalence_callback (rtx loc, const_rtx, void *data)
 /* The current iteration number of this LRA pass.  */
 int lra_constraint_iter;
 
+/* The current iteration number of this LRA pass after the last spill
+   pass.  */
+int lra_constraint_iter_after_spill;
+
 /* True if we substituted equiv which needs checking register
    allocation correctness because the equivalent value contains
    allocatable hard registers or when we restore multi-register
@@ -4092,6 +4169,11 @@ lra_constraints (bool first_p)
   if (lra_dump_file != NULL)
     fprintf (lra_dump_file, "\n********** Local #%d: **********\n\n",
 	     lra_constraint_iter);
+  lra_constraint_iter_after_spill++;
+  if (lra_constraint_iter_after_spill > LRA_MAX_CONSTRAINT_ITERATION_NUMBER)
+    internal_error
+      ("Maximum number of LRA constraint passes is achieved (%d)\n",
+       LRA_MAX_CONSTRAINT_ITERATION_NUMBER);
   changed_p = false;
   lra_risky_transformations_p = false;
   new_insn_uid_start = get_max_uid ();

@@ -5,3 +5,36 @@ LIB1ASMFUNCS = _udivsi3 _divsi3 _umodsi3 _modsi3 _dvmd_lnx _clzsi2 _clzdi2 \
 # Just for these, we omit the frame pointer since it makes such a big
 # difference.
 HOST_LIBGCC2_CFLAGS += -fomit-frame-pointer
+
+# difference. It is then pointless adding debugging.
+
+TARGET_LIBGCC2_CFLAGS = -fno-inline -fomit-frame-pointer -fPIC -Dinhibit_libc
+LIBGCC2_DEBUG_CFLAGS  = -g0
+
+# Don't build enquire
+ENQUIRE=
+
+EXTRA_MULTILIB_PARTS = crtbegin.o crtbeginS.o crtend.o crtendS.o
+
+If EXTRA_MULTILIB_PARTS is not defined above then define EXTRA_PARTS here
+#EXTRA_PARTS = crtbegin.o crtbeginS.o crtend.o crtendS.o
+
+
+LIB1ASMFUNCS = _udivsi3 _divsi3 _umodsi3 _modsi3 _dvmd_tls \
+	_bb_init_func _call_via_rX _interwork_call_via_rX \
+	_lshrdi3 _ashrdi3 _ashldi3 \
+	_negdf2 _addsubdf3 _muldivdf3 _cmpdf2 _unorddf2 _fixdfsi _fixunsdfsi \
+	_truncdfsf2 _negsf2 _addsubsf3 _muldivsf3 _cmpsf2 _unordsf2 \
+	_fixsfsi _fixunssfsi _floatdidf _floatdisf
+
+MULTILIB_OPTIONS  = mlittle-endian/mbig-endian mhard-float/msoft-float
+MULTILIB_DIRNAMES = le be hard-float soft-float
+MULTILIB_MATCHES  = mbig-endian=mbe mlittle-endian=mle
+
+
+
+LIBGCC = stmp-multilib
+INSTALL_LIBGCC = install-multilib
+
+T_CFLAGS = -Dinhibit_libc
+ 

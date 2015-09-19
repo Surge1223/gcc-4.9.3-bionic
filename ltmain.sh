@@ -1280,6 +1280,8 @@ func_mode_compile ()
     $opt_debug
     # Get the compilation command and the source file.
     base_compile=
+    shared_compile=
+    static_compile=
     srcfile="$nonopt"  #  always keep a non-empty value in "srcfile"
     suppress_opt=yes
     suppress_output=
@@ -1303,6 +1305,19 @@ func_mode_compile ()
 	continue
 	;;
 
+      xcompiler-shared )
+        arg_mode=normal
+	func_quote_for_eval "$arg"
+	shared_compile="$shared_compile $func_quote_for_eval_result"
+	continue
+	;;
+
+      xcompiler-static )
+        arg_mode=normal
+	func_quote_for_eval "$arg"
+	static_compile="$static_compile $func_quote_for_eval_result"
+	continue
+	;;
       normal )
 	# Accept any command-line options.
 	case $arg in
@@ -1332,6 +1347,17 @@ func_mode_compile ()
 	  arg_mode=arg  #  the next one goes into the "base_compile" arg list
 	  continue      #  The current "srcfile" will either be retained or
 	  ;;            #  replaced later.  I would guess that would be a bug.
+	-Xcompiler-shared)
+	  arg_mode=xcompiler-shared  #  the next one goes into the
+	                             #  "shared_compile" arg list
+	  continue
+	  ;;
+
+	-Xcompiler-static)
+	  arg_mode=xcompiler-static  #  the next one goes into the
+	                             #  "static_compile" arg list
+	  continue
+	  ;;
 
 	-Wc,*)
 	  func_stripname '-Wc,' '' "$arg"
@@ -1516,10 +1542,10 @@ compiler."
       fbsd_hideous_sh_bug=$base_compile
 
       if test "$pic_mode" != no; then
-	command="$base_compile $qsrcfile $pic_flag"
+	command="$base_compile $qsrcfile $pic_flag $shared_compile"
       else
 	# Don't build PIC code
-	command="$base_compile $qsrcfile"
+	command="$base_compile $qsrcfile $shared_compile"
       fi
 
       func_mkdir_p "$xdir$objdir"
@@ -1568,9 +1594,9 @@ compiler."
     if test "$build_old_libs" = yes; then
       if test "$pic_mode" != yes; then
 	# Don't build PIC code
-	command="$base_compile $qsrcfile$pie_flag"
+	command="$base_compile $qsrcfile$pie_flag $static_compile"
       else
-	command="$base_compile $qsrcfile $pic_flag"
+	command="$base_compile $qsrcfile $pic_flag $static_compile"
       fi
       if test "$compiler_c_o" = yes; then
 	command="$command -o $obj"
@@ -1664,6 +1690,12 @@ This mode accepts the following additional options:
   -shared           do not build a \`.o' file suitable for static linking
   -static           only build a \`.o' file suitable for static linking
   -Wc,FLAG          pass FLAG directly to the compiler
+  -Xcompiler-shared FLAG
+                    pass FLAG directly to the compiler when compiling shared
+		    libraries
+  -Xcompiler-static FLAG
+                    pass FLAG directly to the compiler when compiling static
+		    libraries
 
 COMPILE-COMMAND is a command to be used in creating a \`standard' object file
 from the given SOURCEFILE.
@@ -2797,7 +2829,7 @@ func_win32_libid ()
     ;;
   *ar\ archive*) # could be an import, or static
     if $OBJDUMP -f "$1" | $SED -e '10q' 2>/dev/null |
-       $EGREP 'file format (pe-i386(.*architecture: i386)?|pe-arm-wince|pe-x86-64)' >/dev/null; then
+       $EGREP 'file format (pei*-i386(.*architecture: i386)?|pe-arm-wince|pe-x86-64)' >/dev/null; then
       win32_nmres=`$NM -f posix -A "$1" |
 	$SED -n -e '
 	    1,100{
@@ -2932,7 +2964,7 @@ func_extract_archives ()
         func_extract_an_archive "$my_xdir" "$my_xabs"
 	;;
       esac
-      my_oldobjs="$my_oldobjs "`find $my_xdir -name \*.$objext -print -o -name \*.lo -print | $NL2SP`
+      my_oldobjs="$my_oldobjs "`find $my_xdir -name \*.$objext -print -o -name \*.lo -print | sort | $NL2SP`
     done
 
     func_extract_archives_result="$my_oldobjs"
@@ -5628,8 +5660,14 @@ func_mode_link ()
 	    absdir="$abs_ladir"
 	    libdir="$abs_ladir"
 	  else
-	    dir="$libdir"
-	    absdir="$libdir"
+            # Adding 'libdir' from the .la file to our library search paths
+            # breaks crosscompilation horribly.  We cheat here and don't add
+            # it, instead adding the path where we found the .la.  -CL
+	    dir="$abs_ladir"
+	    absdir="$abs_ladir"
+	    libdir="$abs_ladir"
+	    #dir="$libdir"
+	    #absdir="$libdir"
 	  fi
 	  test "X$hardcode_automatic" = Xyes && avoidtemprpath=yes
 	else
@@ -5780,7 +5818,7 @@ func_mode_link ()
 	  *)
 	    if test "$installed" = no; then
 	      notinst_deplibs="$notinst_deplibs $lib"
-	      need_relink=yes
+	      need_relink=no
 	    fi
 	    ;;
 	  esac
@@ -6149,7 +6187,16 @@ func_mode_link ()
 		  ;;
 		*)
 		  path="-L$absdir/$objdir"
-		  ;;
+#		This interferes with crosscompilation. -CL
+#		else
+#		  eval libdir=`${SED} -n -e 's/^libdir=\(.*\)$/\1/p' $deplib`
+#		  if test -z "$libdir"; then
+#		    $echo "$modename: \`$deplib' is not a valid libtool archive" 1>&2
+#		    exit 1
+#		  fi
+#		  if test "$absdir" != "$libdir"; then
+#		    $echo "$modename: warning: \`$deplib' seems to be moved" 1>&2
+#		  fi
 		esac
 		else
 		  libdir=`${SED} -n -e 's/^libdir=\(.*\)$/\1/p' $deplib`
@@ -8264,6 +8311,10 @@ EOF
 	    # Replace all uninstalled libtool libraries with the installed ones
 	    newdependency_libs=
 	    for deplib in $dependency_libs; do
+              # Replacing uninstalled with installed can easily break crosscompilation,
+              # since the installed path is generally the wrong architecture.  -CL
+              newdependency_libs="$newdependency_libs $deplib"
+              continue
 	      case $deplib in
 	      *.la)
 		func_basename "$deplib"

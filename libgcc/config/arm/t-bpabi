@@ -18,3 +18,11 @@ SHLIB_MAPFILES += $(srcdir)/config/arm/libgcc-bpabi.ver
 # the unwinder in simple programs which use 64-bit division.  Omitting
 # the option is safe.
 LIB2_DIVMOD_EXCEPTION_FLAGS := -fexceptions
+
+TARGET_LIBGCC2_CFLAGS = -fno-inline -fomit-frame-pointer -fPIC -Dinhibit_libc
+LIBGCC2_DEBUG_CFLAGS  = -g0
+
+# Don't build enquire
+ENQUIRE=
+
+EXTRA_MULTILIB_PARTS = crtbegin.o crtend.o crtbegin_dynamic.o crtend_android.o

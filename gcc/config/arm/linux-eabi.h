@@ -18,105 +18,40 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-/* On EABI GNU/Linux, we want both the BPABI builtins and the
-   GNU/Linux builtins.  */
-#undef  TARGET_OS_CPP_BUILTINS
-#define TARGET_OS_CPP_BUILTINS() 		\
-  do 						\
-    {						\
-      TARGET_BPABI_CPP_BUILTINS();		\
-      GNU_USER_TARGET_OS_CPP_BUILTINS();	\
-      ANDROID_TARGET_OS_CPP_BUILTINS();		\
-    }						\
-  while (false)
-
-/* We default to a soft-float ABI so that binaries can run on all
-   target hardware.  If you override this to use the hard-float ABI then
-   change the setting of GLIBC_DYNAMIC_LINKER_DEFAULT as well.  */
-#undef  TARGET_DEFAULT_FLOAT_ABI
-#define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_SOFT
-
-/* We default to the "aapcs-linux" ABI so that enums are int-sized by
-   default.  */
-#undef  ARM_DEFAULT_ABI
-#define ARM_DEFAULT_ABI ARM_ABI_AAPCS_LINUX
-
-/* Default to armv5t so that thumb shared libraries work.
-   The ARM10TDMI core is the default for armv5t, so set
-   SUBTARGET_CPU_DEFAULT to achieve this.  */
-#undef  SUBTARGET_CPU_DEFAULT
-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm10tdmi
-
-/* TARGET_BIG_ENDIAN_DEFAULT is set in
-   config.gcc for big endian configurations.  */
-#undef  TARGET_LINKER_EMULATION
-#if TARGET_BIG_ENDIAN_DEFAULT
-#define TARGET_LINKER_EMULATION "armelfb_linux_eabi"
+#if ANDROID_DEFAULT
+# define NOANDROID "mno-android"
 #else
-#define TARGET_LINKER_EMULATION "armelf_linux_eabi"
+# define NOANDROID "!mandroid"
 #endif
 
-#undef  SUBTARGET_EXTRA_LINK_SPEC
-#define SUBTARGET_EXTRA_LINK_SPEC " -m " TARGET_LINKER_EMULATION
+#define LINUX_OR_ANDROID_CC(LINUX_SPEC, ANDROID_SPEC) \
+  "%{" NOANDROID "|tno-android-cc:" LINUX_SPEC ";:" ANDROID_SPEC "}"
 
-/* GNU/Linux on ARM currently supports three dynamic linkers:
-   - ld-linux.so.2 - for the legacy ABI
-   - ld-linux.so.3 - for the EABI-derived soft-float ABI
-   - ld-linux-armhf.so.3 - for the EABI-derived hard-float ABI.
-   All the dynamic linkers live in /lib.
-   We default to soft-float, but this can be overridden by changing both
-   GLIBC_DYNAMIC_LINKER_DEFAULT and TARGET_DEFAULT_FLOAT_ABI.  */
+#define LINUX_OR_ANDROID_LD(LINUX_SPEC, ANDROID_SPEC) \
+  "%{" NOANDROID "|tno-android-ld:" LINUX_SPEC ";:" ANDROID_SPEC "}"
 
-#undef  GLIBC_DYNAMIC_LINKER
-#define GLIBC_DYNAMIC_LINKER_SOFT_FLOAT "/lib/ld-linux.so.3"
-#define GLIBC_DYNAMIC_LINKER_HARD_FLOAT "/lib/ld-linux-armhf.so.3"
-#define GLIBC_DYNAMIC_LINKER_DEFAULT GLIBC_DYNAMIC_LINKER_SOFT_FLOAT
+#define ANDROID_LINK_SPEC \
+  "%{shared: -Bsymbolic}"
 
-#define GLIBC_DYNAMIC_LINKER \
-   "%{mfloat-abi=hard:" GLIBC_DYNAMIC_LINKER_HARD_FLOAT "} \
-    %{mfloat-abi=soft*:" GLIBC_DYNAMIC_LINKER_SOFT_FLOAT "} \
-    %{!mfloat-abi=*:" GLIBC_DYNAMIC_LINKER_DEFAULT "}"
+#define ANDROID_CC1_SPEC						\
+  "%{!mglibc:%{!muclibc:%{!mbionic: -mbionic}}} "			\
+  "%{!fno-pic:%{!fno-PIC:%{!fpic:%{!fPIC: -fPIC}}}}"
 
-/* At this point, bpabi.h will have clobbered LINK_SPEC.  We want to
-   use the GNU/Linux version, not the generic BPABI version.  */
-#undef  LINK_SPEC
-#define LINK_SPEC EABI_LINK_SPEC					\
-  LINUX_OR_ANDROID_LD (LINUX_TARGET_LINK_SPEC,				\
-		       LINUX_TARGET_LINK_SPEC " " ANDROID_LINK_SPEC)
+#define ANDROID_CC1PLUS_SPEC						\
+  "%{!fexceptions:%{!fno-exceptions: -fno-exceptions}} "		\
+  "%{!frtti:%{!fno-rtti: -fno-rtti}}"
 
-#undef  ASAN_CC1_SPEC
-#define ASAN_CC1_SPEC "%{%:sanitize(address):-funwind-tables}"
+#define ANDROID_LIB_SPEC \
+  "%{!static: -ldl}"
 
-#undef  CC1_SPEC
-#define CC1_SPEC							\
-  LINUX_OR_ANDROID_CC (GNU_USER_TARGET_CC1_SPEC " " ASAN_CC1_SPEC,	\
-		       GNU_USER_TARGET_CC1_SPEC " " ASAN_CC1_SPEC " "	\
-		       ANDROID_CC1_SPEC)
+#define ANDROID_STARTFILE_SPEC						\
+  "%{!shared:"								\
+  "  %{static: crtbegin_static%O%s;: crtbegin_dynamic%O%s}}"
 
-#define CC1PLUS_SPEC \
-  LINUX_OR_ANDROID_CC ("", ANDROID_CC1PLUS_SPEC)
+#define ANDROID_ENDFILE_SPEC \
+  "%{!shared: crtend_android%O%s}"
 
-#undef  LIB_SPEC
-#define LIB_SPEC							\
-  LINUX_OR_ANDROID_LD (GNU_USER_TARGET_LIB_SPEC,			\
-		    GNU_USER_TARGET_NO_PTHREADS_LIB_SPEC " " ANDROID_LIB_SPEC)
-
-#undef	STARTFILE_SPEC
-#define STARTFILE_SPEC \
-  LINUX_OR_ANDROID_LD (GNU_USER_TARGET_STARTFILE_SPEC, ANDROID_STARTFILE_SPEC)
-
-#undef	ENDFILE_SPEC
-#define ENDFILE_SPEC \
-  LINUX_OR_ANDROID_LD (GNU_USER_TARGET_ENDFILE_SPEC, ANDROID_ENDFILE_SPEC)
-
-/* Use the default LIBGCC_SPEC, not the version in linux-elf.h, as we
-   do not use -lfloat.  */
-#undef LIBGCC_SPEC
-
-/* Clear the instruction cache from `beg' to `end'.  This is
-   implemented in lib1funcs.S, so ensure an error if this definition
-   is used.  */
-#undef  CLEAR_INSN_CACHE
-#define CLEAR_INSN_CACHE(BEG, END) not_used
-
-#define ARM_TARGET2_DWARF_FORMAT (DW_EH_PE_pcrel | DW_EH_PE_indirect)
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

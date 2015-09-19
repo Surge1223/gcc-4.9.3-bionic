@@ -760,6 +760,21 @@ AC_ARG_WITH(build-sysroot,
   [SYSROOT_CFLAGS_FOR_TARGET=])
 AC_SUBST(SYSROOT_CFLAGS_FOR_TARGET)
 
+AC_ARG_WITH([runtime-root-prefix],
+  [  --with-runtime-root-prefix=prefix
+                          prepend prefix to paths used by the compiler to
+                          name the dynamic linker and other files used at
+                          runtime.  Defaults to empty (no prefix).],
+[
+ case ${with_runtime_root_prefix} in
+ yes|no) AC_MSG_ERROR([bad value ${withval} given for runtime root prefix]) ;;
+ /*) ;;
+ *) AC_MSG_ERROR([${withval} should be an absolute directory]) ;;
+ esac
+ RUNTIME_ROOT_PREFIX_DEFINE="-DRUNTIME_ROOT_PREFIX=\\\"${withval}\\\""
+], [RUNTIME_ROOT_PREFIX_DEFINE=""])
+AC_SUBST(RUNTIME_ROOT_PREFIX_DEFINE)
+
 if test "x$prefix" = xNONE; then
  test_prefix=/usr/local
 else
@@ -1946,6 +1961,10 @@ case $use_collect2 in
     ;;
 esac
 
+AC_DEFINE_UNQUOTED(FRPLUGINSONAME,"${host_function_reordering_plugin_soname}",
+[Define to the name of the function reordering plugin DSO that must be
+  passed to the linker's -plugin=LIB option.])
+
 AC_DEFINE_UNQUOTED(LTOPLUGINSONAME,"${host_lto_plugin_soname}",
 [Define to the name of the LTO plugin DSO that must be
   passed to the linker's -plugin=LIB option.])
@@ -2234,8 +2253,10 @@ if test -f $gcc_cv_binutils_srcdir/configure.in \
 	gcc_cv_readelf=../binutils/readelf$build_exeext
 elif test -x readelf$build_exeext; then
 	gcc_cv_readelf=./readelf$build_exeext
+elif ( set dummy $READELF_FOR_TARGET; test -x $[2] ); then
+        gcc_cv_readelf="$READELF_FOR_TARGET"
 else
-        AC_PATH_PROG(gcc_cv_readelf, readelf)
+        AC_PATH_PROG(gcc_cv_readelf, $READELF_FOR_TARGET)
 fi])
 
 AC_MSG_CHECKING(what readelf to use)
@@ -3564,29 +3585,6 @@ AS_HELP_STRING([--disable-fix-cortex-a53-835769],
         esac
       ],
     [])
-    # Enable default workaround for AArch64 Cortex-A53 erratum 843419.
-    AC_ARG_ENABLE(fix-cortex-a53-843419,
-    [
-AS_HELP_STRING([--enable-fix-cortex-a53-843419],
-        [enable workaround for AArch64 Cortex-A53 erratum 843419 by default])
-AS_HELP_STRING([--disable-fix-cortex-a53-843419],
-        [disable workaround for AArch64 Cortex-A53 erratum 843419 by default])
-    ],
-      [
-        case $enableval in
-          yes)
-            tm_defines="${tm_defines} TARGET_FIX_ERR_A53_843419_DEFAULT=1"
-            ;;
-          no)
-            ;;
-          *)
-            AC_MSG_ERROR(['$enableval' is an invalid value for --enable-fix-cortex-a53-843419.\
-  Valid choices are 'yes' and 'no'.])
-            ;;
-
-        esac
-      ],
-    [])
     ;;
 
   # All TARGET_ABI_OSF targets.
@@ -3624,13 +3622,6 @@ AS_HELP_STRING([--disable-fix-cortex-a53-843419],
       [-no-mul-bug-abort], [.text],,
       [AC_DEFINE(HAVE_AS_NO_MUL_BUG_ABORT_OPTION, 1,
 		[Define if your assembler supports the -no-mul-bug-abort option.])])
-    ;;
-
-  avr-*-*)
-    gcc_GAS_CHECK_FEATURE([-mrmw option], gcc_cv_as_avr_mrmw,,
-      [-mrmw], [.text],,
-      [AC_DEFINE(HAVE_AS_AVR_MRMW_OPTION, 1,
-		[Define if your assembler supports -mrmw option.])])
     ;;
 
   sparc*-*-*)
@@ -4282,11 +4273,15 @@ LCF0:
 	  [Define if your assembler supports .gnu_attribute.])])
 
     gcc_GAS_CHECK_FEATURE([.module support],
-      gcc_cv_as_mips_dot_module,,[-32],
-      [.module mips2
-       .module fp=xx],,
+      gcc_cv_as_mips_dot_module,,,
+      [.module fp=32],,
       [AC_DEFINE(HAVE_AS_DOT_MODULE, 1,
 	  [Define if your assembler supports .module.])])
+    if test x$gcc_cv_as_mips_dot_module = xno \
+       && test x$with_fp_32 != x; then
+      AC_MSG_ERROR(
+	[Requesting --with-fp-32= requires assembler support for .module.])
+    fi
 
     gcc_GAS_CHECK_FEATURE([.micromips support],
       gcc_cv_as_micromips_support,,[--fatal-warnings],
@@ -4529,6 +4524,8 @@ if test x$host != x$target || test "x$TARGET_SYSTEM_ROOT" != x; then
   else
     target_header_dir="${with_sysroot}${native_system_header_dir}"
   fi
+elif test x$host != x$build && test "x$with_build_sysroot" != "x"; then
+  target_header_dir="${with_build_sysroot}${native_system_header_dir}"
 else
   target_header_dir=${native_system_header_dir}
 fi
@@ -4626,6 +4623,36 @@ GCC_TARGET_TEMPLATE([HAVE_LD_EH_FRAME_HDR])
 if test x"$gcc_cv_ld_eh_frame_hdr" = xyes; then
 	AC_DEFINE(HAVE_LD_EH_FRAME_HDR, 1,
 [Define if your linker supports .eh_frame_hdr.])
+  AC_ARG_ENABLE(eh-frame-hdr-for-static,
+   [AS_HELP_STRING([--enable-eh-frame-hdr-for-static],
+     [enable linker PT_GNU_EH_FRAME support for static executable])],
+   [case $enable_eh_frame_hdr_for_static in
+    yes | no) ;;
+    *) AC_MSG_ERROR(['$enable_eh_frame_hdr_for_static' is an invalid
+value for --enable-eh-frame-hdr-for-static.
+Valid choices are 'yes' and 'no'.]) ;;
+    esac])
+## Only support for glibc 2.3.0 or higher with AT_PHDR/AT_PHNUM from
+## Linux kernel.
+#   [[if test x$host = x$build -a x$host = x$target &&
+#       ldd --version 2>&1 >/dev/null &&
+#       glibcver=`ldd --version 2>/dev/null | sed 's/.* //;q'`; then
+#      glibcmajor=`expr "$glibcver" : "\([0-9]*\)"`
+#      glibcminor=`expr "$glibcver" : "[2-9]*\.\([0-9]*\)"`
+#      glibcnum=`expr $glibcmajor \* 1000 + $glibcminor`
+#      if test "$glibcnum" -ge 2003 ; then
+#	auvx=`LD_SHOW_AUXV=1 ldd 2>/dev/null`
+#	if echo "$auvx" | grep AT_PHDR > /dev/null &&
+#	   echo "$auvx" | grep AT_PHNUM > /dev/null; then
+#	  enable_eh_frame_hdr_for_static=yes
+#	fi
+#      fi
+#    fi]])
+
+  if test x$enable_eh_frame_hdr_for_static = xyes; then
+    AC_DEFINE(USE_EH_FRAME_HDR_FOR_STATIC, 1,
+[Define if your system supports PT_GNU_EH_FRAME for static executable.])
+  fi
 fi
 AC_MSG_RESULT($gcc_cv_ld_eh_frame_hdr)
 
@@ -5441,6 +5468,18 @@ AC_ARG_ENABLE(version-specific-runtime-libs,
                 [specify that runtime libraries should be
                  installed in a compiler-specific directory])])
 
+# Set default prefix canonicalization.
+
+AC_ARG_ENABLE(canonical-prefixes,
+[  --enable-canonical-prefixes
+                          enable or disable prefix canonicalization],
+[],
+enable_canonical_prefixes=yes)
+if test x"$enable_canonical_prefixes" = xyes; then
+  AC_DEFINE(ENABLE_CANONICAL_PREFIXES,
+            1, [Define to enable prefix canonicalization.])
+fi
+
 # Substitute configuration variables
 AC_SUBST(subdirs)
 AC_SUBST(srcdir)
@@ -5532,30 +5571,7 @@ AC_ARG_VAR(CLOOGLIBS,[How to link CLOOG])
 AC_ARG_VAR(CLOOGINC,[How to find CLOOG include files])
 if test "x${CLOOGLIBS}" != "x" ; then 
    AC_DEFINE(HAVE_cloog, 1, [Define if cloog is in use.])
-
-  # Check whether isl_schedule_constraints_compute_schedule is available;
-  # it's new in ISL-0.13.
-  saved_CFLAGS="$CFLAGS"
-  CFLAGS="$CFLAGS $ISLINC"
-  saved_LIBS="$LIBS"
-  LIBS="$LIBS $CLOOGLIBS $ISLLIBS $GMPLIBS"
-
-  AC_MSG_CHECKING([Checking for isl_schedule_constraints_compute_schedule])
-  AC_TRY_LINK([#include <isl/schedule.h>],
-              [isl_schedule_constraints_compute_schedule (NULL);],
-              [ac_has_isl_schedule_constraints_compute_schedule=yes],
-              [ac_has_isl_schedule_constraints_compute_schedule=no])
-  AC_MSG_RESULT($ac_has_isl_schedule_constraints_compute_schedule)
-
-  LIBS="$saved_LIBS"
-  CFLAGS="$saved_CFLAGS"
-
-  if test x"$ac_has_isl_schedule_constraints_compute_schedule" = x"yes"; then
-     AC_DEFINE(HAVE_ISL_SCHED_CONSTRAINTS_COMPUTE_SCHEDULE, 1,
-               [Define if isl_schedule_constraints_compute_schedule exists.])
-  fi
 fi
-
 
 # Check for plugin support
 AC_ARG_ENABLE(plugin,
@@ -5681,6 +5697,20 @@ if test "${ENABLE_LIBQUADMATH_SUPPORT}" != "no" ; then
   AC_DEFINE(ENABLE_LIBQUADMATH_SUPPORT, 1,
             [Define to 1 to enable libquadmath support])
 fi
+
+
+warn_frame_larger_than_extra_text=
+AC_ARG_WITH(warn-frame-larger-than-extra-text,
+[  --with-warn-frame-larger-than-extra-text=TEXT
+                          specifies extra text for frame size warnings],
+[case "${withval}" in
+yes)	AC_MSG_ERROR(bad value ${withval} given for frame size warning text) ;;
+no)	;;
+*)	warn_frame_larger_than_extra_text="$withval" ;;
+esac])
+AC_DEFINE_UNQUOTED(WARN_FRAME_LARGER_THAN_EXTRA_TEXT,
+                   "$warn_frame_larger_than_extra_text",
+                   [Define to be extra text for frame size warnings.])
 
 
 # Specify what hash style to use by default.

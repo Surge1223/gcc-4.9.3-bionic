@@ -507,7 +507,7 @@ static const struct default_options default_options_table[] =
     { OPT_LEVELS_1_PLUS_NOT_DEBUG, OPT_finline_functions_called_once, NULL, 1 },
     { OPT_LEVELS_3_PLUS, OPT_funswitch_loops, NULL, 1 },
     { OPT_LEVELS_3_PLUS, OPT_fgcse_after_reload, NULL, 1 },
-    { OPT_LEVELS_3_PLUS, OPT_ftree_loop_vectorize, NULL, 1 },
+    { OPT_LEVELS_2_PLUS, OPT_ftree_loop_vectorize, NULL, 1 },
     { OPT_LEVELS_3_PLUS, OPT_ftree_slp_vectorize, NULL, 1 },
     { OPT_LEVELS_3_PLUS, OPT_fvect_cost_model_, NULL, VECT_COST_MODEL_DYNAMIC },
     { OPT_LEVELS_3_PLUS, OPT_fipa_cp_clone, NULL, 1 },
@@ -802,6 +802,14 @@ finish_options (struct gcc_options *opts, struct gcc_options *opts_set,
 			     opts->x_param_values, opts_set->x_param_values);
     }
 
+  /* External id is not supported in LIPO mode.  */
+  /* Also force using internal id in coverage mode for now.  */
+  if (opts->x_flag_dyn_ipa || opts->x_flag_test_coverage)
+    {
+      maybe_set_param_value (PARAM_PROFILE_FUNC_INTERNAL_ID, 1,
+                             opts->x_param_values, opts_set->x_param_values);
+    }
+
   if (opts->x_flag_lto)
     {
 #ifdef ENABLE_LTO
@@ -847,15 +855,42 @@ finish_options (struct gcc_options *opts, struct gcc_options *opts_set,
 	}
     }
 
+  if (opts->x_profile_arc_flag
+      || opts->x_flag_branch_probabilities)
+    {
+      /* With profile data, inlining is much more selective and makes
+	 better decisions, so increase the inlining function size
+	 limits.  Changes must be added to both the generate and use
+	 builds to avoid profile mismatches.  */
+      maybe_set_param_value
+	(PARAM_MAX_INLINE_INSNS_SINGLE, 1000,
+	 opts->x_param_values, opts_set->x_param_values);
+      maybe_set_param_value
+	(PARAM_MAX_INLINE_INSNS_AUTO, 1000,
+	 opts->x_param_values, opts_set->x_param_values);
+    }
+
   /* Tune vectorization related parametees according to cost model.  */
   if (opts->x_flag_vect_cost_model == VECT_COST_MODEL_CHEAP)
     {
       maybe_set_param_value (PARAM_VECT_MAX_VERSION_FOR_ALIAS_CHECKS,
-            6, opts->x_param_values, opts_set->x_param_values);
+            8, opts->x_param_values, opts_set->x_param_values);
       maybe_set_param_value (PARAM_VECT_MAX_VERSION_FOR_ALIGNMENT_CHECKS,
             0, opts->x_param_values, opts_set->x_param_values);
       maybe_set_param_value (PARAM_VECT_MAX_PEELING_FOR_ALIGNMENT,
             0, opts->x_param_values, opts_set->x_param_values);
+    }
+
+  /* Set PARAM_MAX_COMPLETELY_PEELED_INSNS to the default original value during
+     -O2 when -funroll-loops and -fpeel-loops are not set.   */
+  if (optimize == 2 && !opts->x_flag_unroll_loops && !opts->x_flag_peel_loops
+      && !opts->x_flag_unroll_all_loops)
+
+    {
+      maybe_set_param_value
+       (PARAM_MAX_COMPLETELY_PEELED_INSNS,
+        PARAM_VALUE (PARAM_MAX_DEFAULT_COMPLETELY_PEELED_INSNS),
+	opts->x_param_values, opts_set->x_param_values);
     }
 
   /* Set PARAM_MAX_STORES_TO_SINK to 0 if either vectorization or if-conversion
@@ -865,23 +900,13 @@ finish_options (struct gcc_options *opts, struct gcc_options *opts_set,
     maybe_set_param_value (PARAM_MAX_STORES_TO_SINK, 0,
                            opts->x_param_values, opts_set->x_param_values);
 
-  /* The -gsplit-dwarf option requires -gpubnames.  */
+  /* The -gsplit-dwarf option requires -ggnu_pubnames.  */
   if (opts->x_dwarf_split_debug_info)
-    opts->x_debug_generate_pub_sections = 1;
+    opts->x_debug_generate_pub_sections = 2;
 
-  /* Userspace and kernel ASan conflict with each other and with TSan.  */
-
-  if ((flag_sanitize & SANITIZE_USER_ADDRESS)
-      && (flag_sanitize & SANITIZE_KERNEL_ADDRESS))
-    error_at (loc,
-              "-fsanitize=address is incompatible with "
-              "-fsanitize=kernel-address");
-
-  if ((flag_sanitize & SANITIZE_ADDRESS)
-      && (flag_sanitize & SANITIZE_THREAD))
-    error_at (loc,
-              "-fsanitize=address and -fsanitize=kernel-address "
-              "are incompatible with -fsanitize=thread");
+  /* Turn on -ffunction-sections when -freorder-functions=* is used.  */
+  if (opts->x_flag_reorder_functions > 1)
+    opts->x_flag_function_sections = 1;
 }
 
 #define LEFT_COLUMN	27
@@ -1263,6 +1288,76 @@ print_specific_help (unsigned int include_flags,
 		       opts->x_help_columns, opts, lang_mask);
 }
 
+/* Set options implied by -f[no-]profile-use[=...]. If RESET is
+   true, it means the profile data is not available, so it is better
+   to turn off the options unless explicitly set. The default
+   values are not checked.  */
+
+void
+set_profile_use_options (struct gcc_options *opts,
+                         struct gcc_options *opts_set,
+                         bool value, bool reset)
+{
+  if (reset)
+   {
+      opts->x_flag_profile_use = false;
+      maybe_set_param_value
+	(PARAM_MAX_INLINE_INSNS_SINGLE,
+         default_param_value (PARAM_MAX_INLINE_INSNS_SINGLE),
+	 opts->x_param_values, opts_set->x_param_values);
+      maybe_set_param_value
+	(PARAM_MAX_INLINE_INSNS_AUTO,
+         default_param_value (PARAM_MAX_INLINE_INSNS_AUTO),
+	 opts->x_param_values, opts_set->x_param_values);
+   }
+
+  if (!opts_set->x_flag_branch_probabilities || reset)
+    opts->x_flag_branch_probabilities = value;
+  if (!opts_set->x_flag_profile_values || reset)
+    opts->x_flag_profile_values = value;
+  if (!opts_set->x_flag_unroll_loops)
+    opts->x_flag_unroll_loops = value;
+  if (!opts_set->x_flag_peel_loops)
+    opts->x_flag_peel_loops = value;
+  if (!opts_set->x_flag_value_profile_transformations || reset)
+    opts->x_flag_value_profile_transformations = value;
+  if (!opts_set->x_flag_inline_functions)
+    opts->x_flag_inline_functions = value;
+  if (!opts_set->x_flag_ipa_cp)
+    opts->x_flag_ipa_cp = value;
+  if (!opts_set->x_flag_ipa_cp_clone
+      && value && opts->x_flag_ipa_cp || reset)
+    opts->x_flag_ipa_cp_clone = value;
+  if (!opts_set->x_flag_predictive_commoning)
+    opts->x_flag_predictive_commoning = value;
+  if (!opts_set->x_flag_unswitch_loops)
+    opts->x_flag_unswitch_loops = value;
+  if (!opts_set->x_flag_gcse_after_reload)
+    opts->x_flag_gcse_after_reload = value;
+  if (!opts_set->x_flag_tree_loop_vectorize
+      && !opts_set->x_flag_tree_vectorize)
+    opts->x_flag_tree_loop_vectorize = value;
+  if (!opts_set->x_flag_tree_loop_distribute_patterns)
+    opts->x_flag_tree_loop_distribute_patterns = value;
+  if (!opts_set->x_flag_profile_reorder_functions || reset)
+    opts->x_flag_profile_reorder_functions = value;
+  /* Indirect call profiling should do all useful transformations
+     speculative devirtualization does.  */
+  if (!opts_set->x_flag_devirtualize_speculatively
+      && opts->x_flag_value_profile_transformations)
+    opts->x_flag_devirtualize_speculatively = false;
+
+  /* See how AUTODECT flag_web is set in toplev.c.  */
+  if (reset && !opts->x_flag_unroll_loops
+      && !opts->x_flag_peel_loops)
+    {
+      if(!opts_set->x_flag_web)
+        opts->x_flag_web = false;
+      if (!opts_set->x_flag_rename_registers)
+        opts->x_flag_rename_registers = false;
+    }
+}
+
 /* Handle target- and language-independent options.  Return zero to
    generate an "unknown option" message.  Only options that need
    extra handling need to be listed here; if you simply want
@@ -1467,10 +1562,7 @@ common_handle_option (struct gcc_options *opts,
 	      size_t len;
 	    } spec[] =
 	    {
-	      { "address", SANITIZE_ADDRESS | SANITIZE_USER_ADDRESS,
-		sizeof "address" - 1 },
-	      { "kernel-address", SANITIZE_ADDRESS | SANITIZE_KERNEL_ADDRESS,
-		sizeof "kernel-address" - 1 },
+	      { "address", SANITIZE_ADDRESS, sizeof "address" - 1 },
 	      { "thread", SANITIZE_THREAD, sizeof "thread" - 1 },
 	      { "leak", SANITIZE_LEAK, sizeof "leak" - 1 },
 	      { "shift", SANITIZE_SHIFT, sizeof "shift" - 1 },
@@ -1531,25 +1623,6 @@ common_handle_option (struct gcc_options *opts,
 	   the null pointer checks.  */
 	if (flag_sanitize & SANITIZE_NULL)
 	  opts->x_flag_delete_null_pointer_checks = 0;
-
-	/* Kernel ASan implies normal ASan but does not yet support
-	   all features.  */
-	if (flag_sanitize & SANITIZE_KERNEL_ADDRESS)
-	  {
-	    maybe_set_param_value (PARAM_ASAN_INSTRUMENTATION_WITH_CALL_THRESHOLD, 0,
-				   opts->x_param_values,
-				   opts_set->x_param_values);
-	    maybe_set_param_value (PARAM_ASAN_GLOBALS, 0,
-				   opts->x_param_values,
-				   opts_set->x_param_values);
-	    maybe_set_param_value (PARAM_ASAN_STACK, 0,
-				   opts->x_param_values,
-				   opts_set->x_param_values);
-	    maybe_set_param_value (PARAM_ASAN_USE_AFTER_RETURN, 0,
-				   opts->x_param_values,
-				   opts_set->x_param_values);
-	  }
-
 	break;
       }
 
@@ -1572,6 +1645,10 @@ common_handle_option (struct gcc_options *opts,
 			       opts, opts_set, loc, dc);
       break;
 
+    case OPT_Wforce_warnings:
+      dc->force_warnings_requested = value;
+      break;
+
     case OPT_Wlarger_than_:
       opts->x_larger_than_size = value;
       opts->x_warn_larger_than = value != -1;
@@ -1589,6 +1666,15 @@ common_handle_option (struct gcc_options *opts,
     case OPT_Wstack_usage_:
       opts->x_warn_stack_usage = value;
       opts->x_flag_stack_usage_info = value != -1;
+      break;
+
+    case OPT_Wshadow:
+      warn_shadow_local = value;
+      warn_shadow_compatible_local = value;
+      break;
+
+    case OPT_Wshadow_local:
+      warn_shadow_compatible_local = value;
       break;
 
     case OPT_Wstrict_aliasing:
@@ -1718,16 +1804,24 @@ common_handle_option (struct gcc_options *opts,
       value = true;
       /* No break here - do -fprofile-use processing. */
     case OPT_fprofile_use:
+      set_profile_use_options (opts, opts_set, value, false);
+      break;
+
+    case OPT_fauto_profile_:
+      auto_profile_file = xstrdup (arg);
+      opts->x_flag_auto_profile = true;
+      maybe_set_param_value (
+	PARAM_EARLY_INLINER_MAX_ITERATIONS, 10,
+	opts->x_param_values, opts_set->x_param_values);
+      value = true;
+    /* No break here - do -fauto-profile processing. */
+    case OPT_fauto_profile:
       if (!opts_set->x_flag_branch_probabilities)
 	opts->x_flag_branch_probabilities = value;
-      if (!opts_set->x_flag_profile_values)
-	opts->x_flag_profile_values = value;
       if (!opts_set->x_flag_unroll_loops)
 	opts->x_flag_unroll_loops = value;
       if (!opts_set->x_flag_peel_loops)
 	opts->x_flag_peel_loops = value;
-      if (!opts_set->x_flag_tracer)
-	opts->x_flag_tracer = value;
       if (!opts_set->x_flag_value_profile_transformations)
 	opts->x_flag_value_profile_transformations = value;
       if (!opts_set->x_flag_inline_functions)
@@ -1746,20 +1840,8 @@ common_handle_option (struct gcc_options *opts,
       if (!opts_set->x_flag_tree_loop_vectorize
           && !opts_set->x_flag_tree_vectorize)
 	opts->x_flag_tree_loop_vectorize = value;
-      if (!opts_set->x_flag_tree_slp_vectorize
-          && !opts_set->x_flag_tree_vectorize)
-	opts->x_flag_tree_slp_vectorize = value;
-      if (!opts_set->x_flag_vect_cost_model)
-	opts->x_flag_vect_cost_model = VECT_COST_MODEL_DYNAMIC;
       if (!opts_set->x_flag_tree_loop_distribute_patterns)
 	opts->x_flag_tree_loop_distribute_patterns = value;
-      if (!opts_set->x_flag_profile_reorder_functions)
-	opts->x_flag_profile_reorder_functions = value;
-      /* Indirect call profiling should do all useful transformations
- 	 speculative devirtualization does.  */
-      if (!opts_set->x_flag_devirtualize_speculatively
-	  && opts->x_flag_value_profile_transformations)
-	opts->x_flag_devirtualize_speculatively = false;
       break;
 
     case OPT_fprofile_generate_:
@@ -1778,6 +1860,10 @@ common_handle_option (struct gcc_options *opts,
 	 is done.  */
       if (!opts_set->x_flag_ipa_reference)
         opts->x_flag_ipa_reference = false;
+      break;
+
+    case OPT_fripa_inc_path_sub_:
+      lipo_inc_path_pattern = xstrdup (arg);
       break;
 
     case OPT_ftree_vectorize:
@@ -1899,6 +1985,12 @@ common_handle_option (struct gcc_options *opts,
 		       loc);
       break;
 
+    case OPT_gmlt:
+      /* Synonym for -g1.  */
+      set_debug_level (NO_DEBUG, DEFAULT_GDB_EXTENSIONS, "1", opts, opts_set,
+		       loc);
+      break;
+
     case OPT_gvms:
       set_debug_level (VMS_DEBUG, false, arg, opts, opts_set, loc);
       break;
@@ -1931,6 +2023,7 @@ common_handle_option (struct gcc_options *opts,
 
     case OPT_fuse_ld_bfd:
     case OPT_fuse_ld_gold:
+    case OPT_fuse_ld_mcld:
     case OPT_fuse_linker_plugin:
       /* No-op. Used by the driver and passed to us because it starts with f.*/
       break;

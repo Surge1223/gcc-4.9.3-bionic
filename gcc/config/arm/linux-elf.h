@@ -1,6 +1,7 @@
-/* Definitions for ARM running Linux-based GNU systems using ELF
-   Copyright (C) 1993-2014 Free Software Foundation, Inc.
-   Contributed by Philip Blundell <philb@gnu.org>
+/* Configuration file for Linux Android targets.
+   Copyright (C) 2010
+   Free Software Foundation, Inc.
+   Contributed by CodeSourcery, Inc.
 
    This file is part of GCC.
 
@@ -14,107 +15,44 @@
    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
    License for more details.
 
-   Under Section 7 of GPL version 3, you are granted additional
-   permissions described in the GCC Runtime Library Exception, version
-   3.1, as published by the Free Software Foundation.
-
-   You should have received a copy of the GNU General Public License and
-   a copy of the GCC Runtime Library Exception along with this program;
-   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   You should have received a copy of the GNU General Public License
+   along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-/* elfos.h should have already been included.  Now just override
-   any conflicting definitions and add any extras.  */
-
-/* Run-time Target Specification.  */
-#undef  TARGET_DEFAULT_FLOAT_ABI
-#define TARGET_DEFAULT_FLOAT_ABI ARM_FLOAT_ABI_HARD
-
-/* TARGET_BIG_ENDIAN_DEFAULT is set in
-   config.gcc for big endian configurations.  */
-#if TARGET_BIG_ENDIAN_DEFAULT
-#define TARGET_ENDIAN_DEFAULT    MASK_BIG_END
-#define TARGET_ENDIAN_OPTION     "mbig-endian"
-#define TARGET_LINKER_EMULATION  "armelfb_linux"
+#if ANDROID_DEFAULT
+# define NOANDROID "mno-android"
 #else
-#define TARGET_ENDIAN_DEFAULT    0
-#define TARGET_ENDIAN_OPTION     "mlittle-endian"
-#define TARGET_LINKER_EMULATION  "armelf_linux"
+# define NOANDROID "!mandroid"
 #endif
 
-#undef  TARGET_DEFAULT
-#define TARGET_DEFAULT (TARGET_ENDIAN_DEFAULT)
+#define LINUX_OR_ANDROID_CC(LINUX_SPEC, ANDROID_SPEC) \
+  "%{" NOANDROID "|tno-android-cc:" LINUX_SPEC ";:" ANDROID_SPEC "}"
 
-#define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm6
+#define LINUX_OR_ANDROID_LD(LINUX_SPEC, ANDROID_SPEC) \
+  "%{" NOANDROID "|tno-android-ld:" LINUX_SPEC ";:" ANDROID_SPEC "}"
 
-#define SUBTARGET_EXTRA_LINK_SPEC " -m " TARGET_LINKER_EMULATION " -p"
+#define ANDROID_LINK_SPEC \
+  "%{shared: -Bsymbolic}"
 
-/* We do not have any MULTILIB_OPTIONS specified, so there are no
-   MULTILIB_DEFAULTS.  */
-#undef  MULTILIB_DEFAULTS
+#define ANDROID_CC1_SPEC						\
+  "%{!mglibc:%{!muclibc:%{!mbionic: -mbionic}}} "			\
+  "%{!fno-pic:%{!fno-PIC:%{!fpic:%{!fPIC: -fPIC}}}}"
 
-/* Now we define the strings used to build the spec file.  */
-#undef  LIB_SPEC
-#define LIB_SPEC \
-  "%{pthread:-lpthread} \
-   %{shared:-lc} \
-   %{!shared:%{profile:-lc_p}%{!profile:-lc}}"
+#define ANDROID_CC1PLUS_SPEC						\
+  "%{!fexceptions:%{!fno-exceptions: -fno-exceptions}} "		\
+  "%{!frtti:%{!fno-rtti: -fno-rtti}}"
 
-#define LIBGCC_SPEC "%{mfloat-abi=soft*:-lfloat} -lgcc"
+#define ANDROID_LIB_SPEC \
+  "%{!static: -ldl}"
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux.so.2"
+#define ANDROID_STARTFILE_SPEC						\
+  "%{!shared:"								\
+  "  %{static: crtbegin_static%O%s;: crtbegin_dynamic%O%s}}"
 
-#define LINUX_TARGET_LINK_SPEC  "%{h*} \
-   %{static:-Bstatic} \
-   %{shared:-shared} \
-   %{symbolic:-Bsymbolic} \
-   %{!static: \
-     %{rdynamic:-export-dynamic} \
-     %{!shared:-dynamic-linker " GNU_USER_DYNAMIC_LINKER "}} \
-   -X \
-   %{mbig-endian:-EB} %{mlittle-endian:-EL}" \
-   SUBTARGET_EXTRA_LINK_SPEC
+#define ANDROID_ENDFILE_SPEC \
+  "%{!shared: crtend_android%O%s}"
 
-#undef  LINK_SPEC
-#define LINK_SPEC LINUX_TARGET_LINK_SPEC
-
-#define TARGET_OS_CPP_BUILTINS()		\
-  do						\
-    {						\
-	GNU_USER_TARGET_OS_CPP_BUILTINS();	\
-    }						\
-  while (0)
-
-/* This is how we tell the assembler that two symbols have the same value.  */
-#define ASM_OUTPUT_DEF(FILE, NAME1, NAME2) \
-  do					   \
-    {					   \
-      assemble_name (FILE, NAME1); 	   \
-      fputs (" = ", FILE);		   \
-      assemble_name (FILE, NAME2);	   \
-      fputc ('\n', FILE);		   \
-    }					   \
-  while (0)
-
-#undef  FPUTYPE_DEFAULT
-#define FPUTYPE_DEFAULT "vfp"
-
-/* Call the function profiler with a given profile label.  */
-#undef  ARM_FUNCTION_PROFILER
-#define ARM_FUNCTION_PROFILER(STREAM, LABELNO)  			\
-{									\
-  fprintf (STREAM, "\tbl\tmcount%s\n",					\
-	   (TARGET_ARM && NEED_PLT_RELOC) ? "(PLT)" : "");		\
-}
-
-/* The GNU/Linux profiler clobbers the link register.  Make sure the
-   prologue knows to save it.  */
-#define PROFILE_HOOK(X)						\
-  emit_clobber (gen_rtx_REG (SImode, LR_REGNUM))
-
-/* The GNU/Linux profiler needs a frame pointer.  */
-#define SUBTARGET_FRAME_POINTER_REQUIRED crtl->profile
-
-/* Add .note.GNU-stack.  */
-#undef NEED_INDICATE_EXEC_STACK
-#define NEED_INDICATE_EXEC_STACK	1
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

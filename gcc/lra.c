@@ -2215,10 +2215,6 @@ int lra_new_regno_start;
 /* Start of reload pseudo regnos before the new spill pass.  */
 int lra_constraint_new_regno_start;
 
-/* Avoid spilling pseudos with regno more than the following value if
-   it is possible.  */
-int lra_bad_spill_regno_start;
-
 /* Inheritance pseudo regnos before the new spill pass.	 */
 bitmap_head lra_inheritance_pseudos;
 
@@ -2299,8 +2295,8 @@ lra (FILE *f)
 
   lra_in_progress = 1;
 
-  lra_live_range_iter = lra_coalesce_iter = lra_constraint_iter = 0;
-  lra_assignment_iter = lra_assignment_iter_after_spill = 0;
+  lra_live_range_iter = lra_coalesce_iter = 0;
+  lra_constraint_iter = lra_constraint_iter_after_spill = 0;
   lra_inheritance_iter = lra_undo_inheritance_iter = 0;
 
   setup_reg_spill_flag ();
@@ -2310,7 +2306,6 @@ lra (FILE *f)
      permit changing reg classes for pseudos created by this
      simplification.  */
   lra_constraint_new_regno_start = lra_new_regno_start = max_reg_num ();
-  lra_bad_spill_regno_start = INT_MAX;
   remove_scratches ();
   scratch_p = lra_constraint_new_regno_start != max_reg_num ();
 
@@ -2423,14 +2418,8 @@ lra (FILE *f)
 	 some eliminations.  So update the offsets here.  */
       lra_eliminate (false, false);
       lra_constraint_new_regno_start = max_reg_num ();
-      if (lra_bad_spill_regno_start == INT_MAX
-	  && lra_inheritance_iter > LRA_MAX_INHERITANCE_PASSES)
-	/* After switching off inheritance and rematerialization
-	   passes, avoid spilling reload pseudos will be created to
-	   prevent LRA cycling in some complicated cases.  */
-	lra_bad_spill_regno_start = lra_constraint_new_regno_start;
       lra_constraint_new_insn_uid_start = get_max_uid ();
-      lra_assignment_iter_after_spill = 0;
+      lra_constraint_iter_after_spill = 0;
     }
   restore_scratches ();
   lra_eliminate (true, false);

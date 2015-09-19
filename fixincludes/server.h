@@ -71,4 +71,5 @@ pid_t proc2_open( t_fd_pair* p_pair, tCC** pp_args );
 int   chain_open( int in_fd, tCC** pp_args, pid_t* p_child );
 void close_server( void );
 
+extern int atexit(void (*)(void));
 #endif /* ! GCC_SERVER_H */
