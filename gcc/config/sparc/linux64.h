@@ -92,8 +92,8 @@ along with GCC; see the file COPYING3.  If not see
    When the -shared link option is used a final link is not being
    done.  */
 
-#define GLIBC_DYNAMIC_LINKER32 "/lib/ld-linux.so.2"
-#define GLIBC_DYNAMIC_LINKER64 "/lib64/ld-linux.so.2"
+#define GLIBC_DYNAMIC_LINKER32 "/data/toolchain/lib/ld-linux.so.2"
+#define GLIBC_DYNAMIC_LINKER64 "/data/toolchain/lib64/ld-linux.so.2"
 
 #ifdef SPARC_BI_ARCH
 
@@ -201,7 +201,7 @@ extern const char *host_detect_local_cpu (int argc, const char **argv);
 #else /* !SPARC_BI_ARCH */
 
 #undef LINK_SPEC
-#define LINK_SPEC "-m elf64_sparc -Y P,%R/usr/lib64 %{shared:-shared} \
+#define LINK_SPEC "-m elf64_sparc -Y P,%R/data/toolchain/lib64 %{shared:-shared} \
   %{!shared: \
     %{!static: \
       %{rdynamic:-export-dynamic} \
@@ -282,3 +282,8 @@ do {									\
 /* We use glibc _mcount for profiling.  */
 #undef NO_PROFILE_COUNTERS
 #define NO_PROFILE_COUNTERS	1
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

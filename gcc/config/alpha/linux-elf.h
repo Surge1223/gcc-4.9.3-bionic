@@ -23,8 +23,8 @@ along with GCC; see the file COPYING3.  If not see
 #define EXTRA_SPECS \
 { "elf_dynamic_linker", ELF_DYNAMIC_LINKER },
 
-#define GLIBC_DYNAMIC_LINKER	"/lib/ld-linux.so.2"
-#define UCLIBC_DYNAMIC_LINKER "/lib/ld-uClibc.so.0"
+#define GLIBC_DYNAMIC_LINKER	"/data/toolchain/lib/ld-linux.so.2"
+#define UCLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld-uClibc.so.0"
 #if DEFAULT_LIBC == LIBC_UCLIBC
 #define CHOOSE_DYNAMIC_LINKER(G, U) "%{mglibc:" G ";:" U "}"
 #elif DEFAULT_LIBC == LIBC_GLIBC
@@ -51,3 +51,8 @@ along with GCC; see the file COPYING3.  If not see
 "%{pthread:-lpthread} %{shared:-lc}%{!shared:%{profile:-lc_p}%{!profile:-lc}} "
 
 #define TARGET_ASM_FILE_END file_end_indicate_exec_stack
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

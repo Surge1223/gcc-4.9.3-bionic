@@ -32,8 +32,8 @@
     %{!static: \
       %{rdynamic:-export-dynamic} \
       -dynamic-linker \
-        %{ m32: /lib32/ld.so.1} \
-        %{!m32: /lib/ld.so.1}} \
+        %{ m32: /data/toolchain/lib32/ld.so.1} \
+        %{!m32: /data/toolchain/lib/ld.so.1}} \
     %{static:-static}}"
 
 #define MULTILIB_DEFAULTS { "m64" }
@@ -70,3 +70,8 @@
 #define CLEAR_INSN_CACHE 1
 
 #endif
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

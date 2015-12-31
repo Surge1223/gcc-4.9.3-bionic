@@ -28,7 +28,7 @@
 #undef TLS_NEEDS_GOT
 #define TLS_NEEDS_GOT 1
 
-#define DYNAMIC_LINKER "/lib/ld.so.1"
+#define DYNAMIC_LINKER "/data/toolchain/lib/ld.so.1"
 #undef  SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS \
   { "dynamic_linker", DYNAMIC_LINKER }
@@ -46,3 +46,8 @@
 /* For the microblaze-*-linux* subtarget.  */
 #undef TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS() GNU_USER_TARGET_OS_CPP_BUILTINS()
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

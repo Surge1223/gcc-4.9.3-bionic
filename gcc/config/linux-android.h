@@ -58,19 +58,15 @@
   "%{shared: crtbegin_so%O%s;:"						\
   "  %{static: crtbegin_static%O%s;: crtbegin_dynamic%O%s}}"
 
-
 #define ANDROID_ENDFILE_SPEC \
   "%{shared: crtend_so%O%s;: crtend_android%O%s}"
-  
-  
 
-#if defined(ANDROID) || defined(__ANDROID__)
 #undef STANDARD_STARTFILE_PREFIX_1
 #undef STANDARD_STARTFILE_PREFIX_2
-#ifndef STANDARD_STARTFILE_PREFIX_1
-#define STANDARD_STARTFILE_PREFIX_1 "/system/lib/"
-#endif
-#ifndef STANDARD_STARTFILE_PREFIX_2
-#define STANDARD_STARTFILE_PREFIX_2 "/data/toolchain/lib/"
-#endif
-#endif
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/"
+#define STANDARD_STARTFILE_PREFIX_2 ""
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

@@ -26,69 +26,7 @@ You should have received a copy of the GNU General Public License and
 a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
-#if 0
-/* Don't assume anything about the header files.  */
-#define NO_IMPLICIT_EXTERN_C
 
-#undef ASM_APP_ON
-#define ASM_APP_ON "#APP\n"
-
-#undef ASM_APP_OFF
-#define ASM_APP_OFF "#NO_APP\n"
-
-#undef MD_EXEC_PREFIX
-#undef MD_STARTFILE_PREFIX
-
-/* Provide a STARTFILE_SPEC appropriate for GNU/Linux.  Here we add
-   the GNU/Linux magical crtbegin.o file (see crtstuff.c) which
-   provides part of the support for getting C++ file-scope static
-   object constructed before entering `main'.  */
-   
-#if defined (HAVE_LD_PIE) && defined (ENABLE_CRTBEGINTS)
-#define LINUX_TARGET_STARTFILE_SPEC \
-  "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} crti.o%s \
-   %{static:%{pie:crtbeginTS.o%s;:crtbeginT.o%s}} %{!static:%{shared|pie:crtbeginS.o%s;:crtbegin.o%s}}"
-#elif defined (HAVE_LD_PIE) && ! defined (ENABLE_CRTBEGINTS)
-#define LINUX_TARGET_STARTFILE_SPEC \
-  "%{!shared: %{pg|p|profile:gcrt1.o%s;pie:Scrt1.o%s;:crt1.o%s}} \
-   crti.o%s %{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
-#else
-#define LINUX_TARGET_STARTFILE_SPEC \
-  "%{!shared: %{pg|p|profile:gcrt1.o%s;:crt1.o%s}} \
-   crti.o%s %{static:crtbeginT.o%s;shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
-#endif
-#undef  STARTFILE_SPEC
-#define STARTFILE_SPEC LINUX_TARGET_STARTFILE_SPEC
-
-/* Provide a ENDFILE_SPEC appropriate for GNU/Linux.  Here we tack on
-   the GNU/Linux magical crtend.o file (see crtstuff.c) which
-   provides part of the support for getting C++ file-scope static
-   object constructed before entering `main', followed by a normal
-   GNU/Linux "finalizer" file, `crtn.o'.  */
-
-#define LINUX_TARGET_ENDFILE_SPEC \
-  "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
-#undef  ENDFILE_SPEC
-#define ENDFILE_SPEC LINUX_TARGET_ENDFILE_SPEC
-
-/* This is for -profile to use -lc_p instead of -lc.  */
-#define LINUX_TARGET_CC1_SPEC "%{profile:-p}"
-#ifndef CC1_SPEC
-#define CC1_SPEC LINUX_TARGET_CC1_SPEC
-#endif
-
-/* The GNU C++ standard library requires that these macros be defined.  */
-#undef CPLUSPLUS_CPP_SPEC
-#define CPLUSPLUS_CPP_SPEC "-D_GNU_SOURCE %(cpp)"
-
-#define LINUX_TARGET_LIB_SPEC \
-  "%{pthread:-lpthread} \
-   %{shared:-lc} \
-   %{!shared:%{mieee-fp:-lieee} %{profile:-lc_p}%{!profile:-lc}}"
-#undef  LIB_SPEC
-#define LIB_SPEC LINUX_TARGET_LIB_SPEC
-
-#endif
 /* C libraries supported on Linux.  */
 #ifdef SINGLE_LIBC
 #define OPTION_GLIBC  (DEFAULT_LIBC == LIBC_GLIBC)
@@ -111,19 +49,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 	builtin_assert ("system=posix");			\
     } while (0)
 
-#if defined(HAVE_LD_EH_FRAME_HDR)
-#define LINK_EH_SPEC "%{!static:--eh-frame-hdr} "
-#endif
-
-
-#undef LINK_GCC_C_SEQUENCE_SPEC
-#define LINK_GCC_C_SEQUENCE_SPEC \
-  "%{static:--start-group} %G %L %{static:--end-group}%{!static:%G}"
-
-/* Use --as-needed -lgcc_s for eh support.  */
-#ifdef HAVE_LD_AS_NEEDED
-#define USE_LD_AS_NEEDED 1
-#endif
 /* Determine which dynamic linker to use depending on whether GLIBC or
    uClibc or Bionic is the default C library and whether
    -muclibc or -mglibc or -mbionic has been passed to change the default.  */
@@ -181,6 +106,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef STANDARD_INCLUDE_DIR
 #define STANDARD_INCLUDE_DIR 0
 #endif
+
 #if (DEFAULT_LIBC == LIBC_UCLIBC) && defined (SINGLE_LIBC) /* uClinux */
 /* This is a *uclinux* target.  We don't define below macros to normal linux
    versions, because doing so would require *uclinux* targets to include
@@ -209,7 +135,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 # define TARGET_LIBC_HAS_FUNCTION linux_libc_has_function
 
 #endif
+
 #undef STANDARD_STARTFILE_PREFIX_1
 #undef STANDARD_STARTFILE_PREFIX_2
 #define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/"
+#define STANDARD_STARTFILE_PREFIX_2 ""
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
 #define STANDARD_STARTFILE_PREFIX_2 ""

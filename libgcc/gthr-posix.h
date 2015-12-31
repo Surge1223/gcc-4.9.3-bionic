@@ -249,6 +249,9 @@ __gthread_active_p (void)
 __gthrw2(__gthrw_(__pthread_key_create),
 	 __pthread_key_create,
 	 pthread_key_create)
+#ifndef __BIONIC__
+ __gthrw(pthread_cancel)
+#endif
 # define GTHR_ACTIVE_PROXY	__gthrw_(__pthread_key_create)
 #elif defined (__BIONIC__)
 # define GTHR_ACTIVE_PROXY	__gthrw_(pthread_create)
@@ -260,8 +263,15 @@ static inline int
 __gthread_active_p (void)
 {
   static void *const __gthread_active_ptr
-    = __extension__ (void *) &GTHR_ACTIVE_PROXY;
+    = __extension__ (void *) &__gthrw_(
+/* Android's C library does not provide pthread_cancel, check for
+   `pthread_create' instead.  */
+#ifndef __BIONIC__
+				       pthread_cancel
+#else
   return __gthread_active_ptr != 0;
+#endif
+
 }
 
 #endif /* FreeBSD or Solaris */

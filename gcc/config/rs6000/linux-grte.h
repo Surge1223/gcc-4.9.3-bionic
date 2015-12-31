@@ -39,3 +39,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
   { "libc_p", "%{static:%(libc_p_static);:-lc_p}" }, \
   { "libc_static", "-lc -lresolv" }, \
   { "libc_p_static", "-lc_p -lresolv_p" },
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

@@ -25,3 +25,8 @@ extern bool linux_libc_has_function (enum function_class fn_class);
 #undef STANDARD_STARTFILE_PREFIX_2
 #define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/"
 #define STANDARD_STARTFILE_PREFIX_2 ""
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

@@ -55,7 +55,7 @@ do {						\
 /* Define this for shared library support because it isn't in the main
    linux.h file.  */
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux-ia64.so.2"
+#define GLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld-linux-ia64.so.2"
 
 #undef LINK_SPEC
 #define LINK_SPEC "\
@@ -88,3 +88,8 @@ do {						\
 
 /* Define this to be nonzero if static stack checking is supported.  */
 #define STACK_CHECK_STATIC_BUILTIN 1
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

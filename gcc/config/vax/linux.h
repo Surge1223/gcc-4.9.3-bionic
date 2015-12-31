@@ -41,7 +41,7 @@ along with GCC; see the file COPYING3.  If not see
   %{!shared: \
     %{!static: \
       %{rdynamic:-export-dynamic} \
-      -dynamic-linker /lib/ld.so.1} \
+      -dynamic-linker /data/toolchain/lib/ld.so.1} \
     %{static:-static}}"
 
 #undef  WCHAR_TYPE
@@ -49,3 +49,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef  WCHAR_TYPE_SIZE
 #define WCHAR_TYPE_SIZE BITS_PER_WORD
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

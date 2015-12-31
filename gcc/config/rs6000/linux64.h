@@ -363,14 +363,14 @@ extern int dot_symbols;
 #undef	LINK_OS_DEFAULT_SPEC
 #define LINK_OS_DEFAULT_SPEC "%(link_os_linux)"
 
-#define GLIBC_DYNAMIC_LINKER32 "/lib/ld.so.1"
+#define GLIBC_DYNAMIC_LINKER32 "/data/toolchain/lib/ld.so.1"
 #ifdef LINUX64_DEFAULT_ABI_ELFv2
-#define GLIBC_DYNAMIC_LINKER64 "%{mabi=elfv1:/lib64/ld64.so.1;:/lib64/ld64.so.2}"
+#define GLIBC_DYNAMIC_LINKER64 "%{mabi=elfv1:/data/toolchain/lib64/ld64.so.1;:/data/toolchain/lib64/ld64.so.2}"
 #else
-#define GLIBC_DYNAMIC_LINKER64 "%{mabi=elfv2:/lib64/ld64.so.2;:/lib64/ld64.so.1}"
+#define GLIBC_DYNAMIC_LINKER64 "%{mabi=elfv2:/data/toolchain/lib64/ld64.so.2;:/data/toolchain/lib64/ld64.so.1}"
 #endif
-#define UCLIBC_DYNAMIC_LINKER32 "/lib/ld-uClibc.so.0"
-#define UCLIBC_DYNAMIC_LINKER64 "/lib/ld64-uClibc.so.0"
+#define UCLIBC_DYNAMIC_LINKER32 "/data/toolchain/lib/ld-uClibc.so.0"
+#define UCLIBC_DYNAMIC_LINKER64 "/data/toolchain/lib/ld64-uClibc.so.0"
 #if DEFAULT_LIBC == LIBC_UCLIBC
 #define CHOOSE_DYNAMIC_LINKER(G, U) "%{mglibc:" G ";:" U "}"
 #elif DEFAULT_LIBC == LIBC_GLIBC
@@ -577,3 +577,8 @@ extern int dot_symbols;
 #undef TARGET_FLOAT_EXCEPTIONS_ROUNDING_SUPPORTED_P
 #define TARGET_FLOAT_EXCEPTIONS_ROUNDING_SUPPORTED_P \
   rs6000_linux_float_exceptions_rounding_supported_p
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

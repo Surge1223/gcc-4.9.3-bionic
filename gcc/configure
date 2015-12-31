@@ -6337,7 +6337,7 @@ fi;
 
 # Check whether --with-dynamic-linker-prefix= was given.
 
-DYNAMICLINKERPREFIX="/system/lib" ;
+DYNAMICLINKERPREFIX="/system/bin" ;
 if test "${with_dynamic_linker_prefix+set}" = set; then
   withval="$with_dynamic_linker_prefix"
   case "${withval}" in

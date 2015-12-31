@@ -44,10 +44,8 @@
 
 ;; A list of modes which the VFP unit can handle
 (define_mode_iterator SDF [(SF "TARGET_VFP") (DF "TARGET_VFP_DOUBLE")])
-
 ;; Integer element sizes implemented by IWMMXT.
 (define_mode_iterator VMMX [V2SI V4HI V8QI])
-
 (define_mode_iterator VMMX2 [V4HI V2SI])
 
 ;; Integer element sizes for shifts.
@@ -154,7 +152,6 @@
 
 ;; Modes with 8-bit, 16-bit and 32-bit elements.
 (define_mode_iterator VU [V16QI V8HI V4SI])
-
 ;; Iterators used for fixed-point support.
 (define_mode_iterator FIXED [QQ HQ SQ UQQ UHQ USQ HA SA UHA USA])
 
@@ -165,7 +162,6 @@
 (define_mode_iterator QADDSUB [V4QQ V2HQ QQ HQ V2HA HA SQ SA])
 
 (define_mode_iterator QMUL [HQ HA])
-
 ;;----------------------------------------------------------------------------
 ;; Code iterators
 ;;----------------------------------------------------------------------------
@@ -187,7 +183,6 @@
 
 ;; A list of widening operators
 (define_code_iterator SE [sign_extend zero_extend])
-
 ;; Right shifts
 (define_code_iterator rshifts [ashiftrt lshiftrt])
 
@@ -232,7 +227,6 @@
 ;; As above but in lower case.
 (define_mode_attr V_cvtto [(V2SI "v2sf") (V2SF "v2si")
                            (V4SI "v4sf") (V4SF "v4si")])
-
 ;; Define element mode for each vector mode.
 (define_mode_attr V_elem [(V8QI "QI") (V16QI "QI")
               (V4HI "HI") (V8HI "HI")
@@ -333,7 +327,6 @@
 				(V2SI "v2si") (V4SI  "v4si")
 				(DI   "di")   (V2DI  "v2di")
 				(V2SF "v2si") (V4SF  "v4si")])
-
 ;; Get element type from double-width mode, for operations where we 
 ;; don't care about signedness.
 (define_mode_attr V_if_elem [(V8QI "i8")  (V16QI "i8")
@@ -374,7 +367,6 @@
                              (V2SI "s") (V4SI  "s")
                              (DI   "d") (V2DI  "d")
                              (V2SF "s") (V4SF  "s")])
-
 ;; Element sizes for duplicating ARM registers to all elements of a vector.
 (define_mode_attr VD_dup [(V8QI "8") (V4HI "16") (V2SI "32") (V2SF "32")])
 
@@ -487,7 +479,6 @@
 ;; Assembler mnemonics for vqh_ops and vqhs_ops iterators.
 (define_code_attr VQH_mnem [(plus "vadd") (smin "vmin") (smax "vmax")
                 (umin "vmin") (umax "vmax")])
-
 ;; Type attributes for vqh_ops and vqhs_ops iterators.
 (define_code_attr VQH_type [(plus "add") (smin "minmax") (smax "minmax")
                 (umin "minmax") (umax "minmax")])
@@ -501,7 +492,6 @@
 
 ;; Assembler mnemonics for signedness of widening operations.
 (define_code_attr US [(sign_extend "s") (zero_extend "u")])
-
 ;; Right shifts
 (define_code_attr shift [(ashiftrt "ashr") (lshiftrt "lshr")])
 (define_code_attr shifttype [(ashiftrt "signed") (lshiftrt "unsigned")])

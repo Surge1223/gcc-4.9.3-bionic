@@ -15110,9 +15110,6 @@ $as_echo "#define _GLIBCXX_SJLJ_EXCEPTIONS 1" >>confdefs.h
     no)
       ac_exception_model_name="call frame"
       ;;
-    *)
-      as_fn_error "unable to detect exception model" "$LINENO" 5
-      ;;
   esac
  ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'

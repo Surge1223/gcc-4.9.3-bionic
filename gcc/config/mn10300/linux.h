@@ -32,7 +32,7 @@
 #undef  ASM_SPEC
 #define ASM_SPEC ""
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld.so.1"
+#define GLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld.so.1"
 
 #undef  LINK_SPEC
 #define LINK_SPEC "%{mrelax:--relax} %{shared:-shared} \
@@ -85,3 +85,8 @@ extern int mn10300_protect_label;
 #undef PTRDIFF_TYPE
 #undef WCHAR_TYPE
 #undef WCHAR_TYPE_SIZE
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

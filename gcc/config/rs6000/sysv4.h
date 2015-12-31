@@ -761,8 +761,8 @@ ENDIAN_SELECT(" -mbig", " -mlittle", DEFAULT_ASM_ENDIAN)
 
 #define LINK_START_LINUX_SPEC ""
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld.so.1"
-#define UCLIBC_DYNAMIC_LINKER "/lib/ld-uClibc.so.0"
+#define GLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld.so.1"
+#define UCLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld-uClibc.so.0"
 #if DEFAULT_LIBC == LIBC_UCLIBC
 #define CHOOSE_DYNAMIC_LINKER(G, U) "%{mglibc:" G ";:" U "}"
 #elif !defined (DEFAULT_LIBC) || DEFAULT_LIBC == LIBC_GLIBC
@@ -806,7 +806,7 @@ ncrtn.o%s"
 #define LINK_OS_NETBSD_SPEC "\
 %{!shared: %{!static: \
   %{rdynamic:-export-dynamic} \
-  -dynamic-linker /usr/libexec/ld.elf_so}}"
+  -dynamic-linker /data/toolchain/libexec/ld.elf_so}}"
 
 #define CPP_OS_NETBSD_SPEC "\
 -D__powerpc__ -D__NetBSD__ -D__KPRINTF_ATTRIBUTE__"
@@ -965,3 +965,8 @@ ncrtn.o%s"
   LD_STATIC_OPTION " --whole-archive -ltsan --no-whole-archive " \
   LD_DYNAMIC_OPTION "}}%{!static-libtsan:-ltsan}"
 #endif
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

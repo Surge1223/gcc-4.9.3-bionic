@@ -15471,7 +15471,7 @@ sysv4*MP*)
   fi
   ;;
 
-  arm*-*-linux-androideabi | sco3.2v5* | sco5v6* | unixware* | OpenUNIX* | sysv4*uw2*)
+ sco3.2v5* | sco5v6* | unixware* | OpenUNIX* | sysv4*uw2*)
   version_type=elf
   need_lib_prefix=no
   need_version=no

@@ -34,7 +34,7 @@
 #define ENDFILE_SPEC \
   "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld.so.1"
+#define GLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld.so.1"
 
 #undef LINK_SPEC
 #define LINK_SPEC "\
@@ -72,3 +72,8 @@ asm (TEXT_SECTION_ASM_OP);
 #define Twrite __write
 
 #endif /* __FRV_LINUX_H__ */
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

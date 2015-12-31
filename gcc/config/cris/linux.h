@@ -102,7 +102,7 @@ along with GCC; see the file COPYING3.  If not see
 #undef CRIS_DEFAULT_CPU_VERSION
 #define CRIS_DEFAULT_CPU_VERSION CRIS_CPU_NG
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld.so.1"
+#define GLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld.so.1"
 
 #undef CRIS_LINK_SUBTARGET_SPEC
 #define CRIS_LINK_SUBTARGET_SPEC \
@@ -148,3 +148,8 @@ along with GCC; see the file COPYING3.  If not see
  * indent-tabs-mode: t
  * End:
  */
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

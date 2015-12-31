@@ -43,7 +43,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #define TARGET_ASM_FILE_END file_end_indicate_exec_stack
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux.so.2"
+#define GLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld-linux.so.2"
 
 #undef SUBTARGET_LINK_EMUL_SUFFIX
 #define SUBTARGET_LINK_EMUL_SUFFIX "_linux"
@@ -150,3 +150,8 @@ along with GCC; see the file COPYING3.  If not see
 	TARGET_USERMODE = true;						\
     }									\
   while (0)
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

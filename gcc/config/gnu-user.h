@@ -82,11 +82,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef CPLUSPLUS_CPP_SPEC
 #define CPLUSPLUS_CPP_SPEC "-D_GNU_SOURCE %(cpp)"
 
-#define GNU_USER_TARGET_LIB_SPEC \
-  "%{pthread:-lpthread} \
-   %{shared:-lc} \
+#define GNU_USER_TARGET_NO_PTHREADS_LIB_SPEC \
+  "%{shared:-lc} \
    %{!shared:%{mieee-fp:-lieee} %{profile:-lc_p}%{!profile:-lc}}"
 
+#define GNU_USER_TARGET_LIB_SPEC \
+  "%{pthread:-lpthread} " \
+  GNU_USER_TARGET_NO_PTHREADS_LIB_SPEC
 
 #undef  LIB_SPEC
 #define LIB_SPEC GNU_USER_TARGET_LIB_SPEC
@@ -116,8 +118,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 /* Link -lasan early on the command line.  For -static-libasan, don't link
    it for -shared link, the executable should be compiled with -static-libasan
    in that case, and for executable link link with --{,no-}whole-archive around
-   it to force everything into the executable.  And similarly for -ltsan
-   and -llsan.  */
+   it to force everything into the executable.  And similarly for -ltsan.  */
 #if defined(HAVE_LD_STATIC_DYNAMIC)
 #undef LIBASAN_EARLY_SPEC
 #define LIBASAN_EARLY_SPEC "%{!shared:libasan_preinit%O%s} " \
@@ -128,8 +129,4 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define LIBTSAN_EARLY_SPEC "%{static-libtsan:%{!shared:" \
   LD_STATIC_OPTION " --whole-archive -ltsan --no-whole-archive " \
   LD_DYNAMIC_OPTION "}}%{!static-libtsan:-ltsan}"
-#undef LIBLSAN_EARLY_SPEC
-#define LIBLSAN_EARLY_SPEC "%{static-liblsan:%{!shared:" \
-  LD_STATIC_OPTION " --whole-archive -llsan --no-whole-archive " \
-  LD_DYNAMIC_OPTION "}}%{!static-liblsan:-llsan}"
 #endif

@@ -142,3 +142,8 @@ do {									\
 
 #define SDATA_SECTION_ASM_OP "\t.sdata"
 #define SBSS_SECTION_ASM_OP "\t.sbss"
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

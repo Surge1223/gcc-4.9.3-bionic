@@ -45,8 +45,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
   %{shared:-G -Bdynamic} \
   %{!shared: %{!static: \
    %{rdynamic:-export-dynamic} \
-   -dynamic-linker /lib/ld-uClibc.so.0} \
+   -dynamic-linker /data/toolchain/lib/ld-uClibc.so.0} \
    %{static}} -init __init -fini __fini"
 
 #undef TARGET_SUPPORTS_SYNC_CALLS
 #define TARGET_SUPPORTS_SYNC_CALLS 1
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

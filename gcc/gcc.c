@@ -1193,20 +1193,7 @@ static const char *gcc_libexec_prefix;
 /* Default prefixes to attach to command names.  */
 
 
-#if defined(ANDROID) || defined(__ANDROID__)
-#ifndef STANDARD_STARTFILE_PREFIX_1
-#define STANDARD_STARTFILE_PREFIX_1 "/system/lib/"
-#endif
-#ifndef STANDARD_STARTFILE_PREFIX_2
-#define STANDARD_STARTFILE_PREFIX_2 "/data/toolchain/lib/"
-#endif
-#ifndef STANDARD_STARTFILE_PREFIX_3
-#define STANDARD_STARTFILE_PREFIX_3 "/data/toolchain/sysroot/usr/lib/"
-#endif
-#ifndef STANDARD_STARTFILE_PREFIX_4
-#define STANDARD_STARTFILE_PREFIX_4 "/data/toolchain/usr/lib"
-#endif
-#else
+
 #ifndef STANDARD_STARTFILE_PREFIX_1
 #define STANDARD_STARTFILE_PREFIX_1 "/lib/"
 #endif
@@ -1218,7 +1205,6 @@ static const char *gcc_libexec_prefix;
 #endif
 #ifndef STANDARD_STARTFILE_PREFIX_4
 #define STANDARD_STARTFILE_PREFIX_4 "/data/toolchain/lib/"
-#endif
 #endif
 
 

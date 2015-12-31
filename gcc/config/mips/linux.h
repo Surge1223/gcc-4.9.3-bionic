@@ -18,8 +18,13 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #define GLIBC_DYNAMIC_LINKER \
-  "%{mnan=2008:/lib/ld-linux-mipsn8.so.1;:/lib/ld.so.1}"
+  "%{mnan=2008:/data/toolchain/lib/ld-linux-mipsn8.so.1;:/data/toolchain/lib/ld.so.1}"
 
 #undef UCLIBC_DYNAMIC_LINKER
 #define UCLIBC_DYNAMIC_LINKER \
-  "%{mnan=2008:/lib/ld-uClibc-mipsn8.so.0;:/lib/ld-uClibc.so.0}"
+  "%{mnan=2008:/data/toolchain/lib/ld-uClibc-mipsn8.so.0;:/data/toolchain/lib/ld-uClibc.so.0}"
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

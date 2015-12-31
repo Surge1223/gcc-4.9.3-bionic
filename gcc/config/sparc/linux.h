@@ -83,7 +83,7 @@ extern const char *host_detect_local_cpu (int argc, const char **argv);
    When the -shared link option is used a final link is not being
    done.  */
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux.so.2"
+#define GLIBC_DYNAMIC_LINKER "/data/toolchain/lib/ld-linux.so.2"
 
 #undef  LINK_SPEC
 #define LINK_SPEC "-m elf32_sparc %{shared:-shared} \
@@ -167,3 +167,8 @@ do {									\
 /* We use glibc _mcount for profiling.  */
 #undef NO_PROFILE_COUNTERS
 #define NO_PROFILE_COUNTERS	1
+
+#undef STANDARD_STARTFILE_PREFIX_1
+#undef STANDARD_STARTFILE_PREFIX_2
+#define STANDARD_STARTFILE_PREFIX_1 "/data/toolchain/lib/"
+#define STANDARD_STARTFILE_PREFIX_2 ""

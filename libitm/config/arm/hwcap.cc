@@ -38,7 +38,7 @@ int GTM_hwcap HIDDEN = 0
 #endif
   ;
 
-#ifdef __linux__
+#if 0
 #include <unistd.h>
 #include <sys/fcntl.h>
 #include <elf.h>
